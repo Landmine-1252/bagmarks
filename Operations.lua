@@ -15,15 +15,15 @@ function Ops:Eligible(item, state)
     return state == "mail" and A.API:CanMail(item)
 end
 
-function Ops:PreviewJunk()
-    if not A.API:MerchantReady() then A.Print("Open the merchant's Buy tab with an empty cursor, outside combat."); return end
-    if self.job then return end
+-- Both sale paths capture exact GUIDs once, then use the same per-item checks.
+-- Automatic sales can process all captured candidates; manual previews show 12.
+function Ops:CollectJunk(limit)
     A.Store:RefreshInventory()
     local items = A.API:Scan(false)
     local preview, skipped, total = {}, 0, 0
     for _, item in ipairs(ordered(items)) do
         if A.Store:Get(item.guid) == "junk" then
-            if #preview < 12 and self:Eligible(item, "junk") then
+            if (not limit or #preview < limit) and self:Eligible(item, "junk") then
                 local price = A.API:SellPrice(item)
                 preview[#preview + 1] = { guid = item.guid, count = item.count, itemID = item.itemID,
                     link = item.link, price = price }
@@ -31,6 +31,37 @@ function Ops:PreviewJunk()
             else skipped = skipped + 1 end
         end
     end
+    return preview, skipped, total
+end
+
+function Ops:CancelAutoSale()
+    self.autoSalePending = nil
+    if self.job and self.job.automatic then self:Cancel() end
+end
+
+function Ops:AutoSellJunk()
+    if not A.CanAct() or not A.db.autoSellJunk or self.job or self.autoSalePending then return end
+    local ticket = {}
+    self.autoSalePending = ticket
+    -- Merchant frame setup and initial inventory events may follow MERCHANT_SHOW.
+    -- A cancelled visit can never reuse this callback at a different merchant.
+    C_Timer.After(.2, function()
+        if self.autoSalePending ~= ticket then return end
+        self.autoSalePending = nil
+        if not A.db.autoSellJunk or not A.API:MerchantReady() or self.job
+            or (A.UI.confirm and A.UI.confirm:IsShown()) then return end
+        local entries = self:CollectJunk()
+        if #entries == 0 then return end
+        self.job = { kind = "junk", automatic = true, entries = entries, index = 1, completed = 0 }
+        self:Step()
+    end)
+end
+
+function Ops:PreviewJunk()
+    if not A.API:MerchantReady() then A.Print("Open the merchant's Buy tab with an empty cursor, outside combat."); return end
+    if self.job then return end
+    self.autoSalePending = nil -- A deliberate preview takes priority over a delayed auto-sale.
+    local preview, skipped, total = self:CollectJunk(12)
     if #preview == 0 then A.Print("No eligible marked junk. Changed stacks, busy, unsellable, quest and refundable items are skipped."); return end
     local lines = { "Sell these marked stacks? (Up to 12 per batch.)", "" }
     for _, item in ipairs(preview) do
@@ -51,6 +82,7 @@ end
 function Ops:AttachMail()
     if not A.API:MailReady() then A.Print("Open Send Mail with an empty cursor, outside combat."); return end
     if self.job then return end
+    self.autoSalePending = nil
     if not A.API:FreeAttachment() then A.Print("All mail attachment slots are occupied."); return end
     A.Mail:FillRecipient()
     A.Store:RefreshInventory()
@@ -68,6 +100,7 @@ end
 
 function Ops:Cancel(message)
     local active = self.job ~= nil
+    self.autoSalePending = nil
     self.job = nil
     self.generation = (self.generation or 0) + 1
     A.UI:CloseConfirmation()
@@ -90,7 +123,9 @@ function Ops:Step()
     local job = self.job
     if not job then return end
     local ready = job.kind == "junk" and A.API:MerchantReady() or job.kind == "mail" and A.API:MailReady()
-    if not ready then self:Cancel("Operation stopped. Remaining markings were kept."); return end
+    if not ready or (job.automatic and not A.db.autoSellJunk) then
+        self:Cancel("Operation stopped. Remaining markings were kept."); return
+    end
     if job.kind == "mail" and not A.API:FreeAttachment() then self:Finish(); return end
     A.Store:RefreshInventory()
     local entry = job.entries[job.index]
@@ -135,7 +170,9 @@ function Ops:Poll()
     local job = self.job
     if not job or not job.pending then return end
     local ready = job.kind == "junk" and A.API:MerchantReady() or job.kind == "mail" and A.API:MailReady()
-    if not ready then self:Cancel("Operation stopped. Remaining markings were kept."); return end
+    if not ready or (job.automatic and not A.db.autoSellJunk) then
+        self:Cancel("Operation stopped. Remaining markings were kept."); return
+    end
     local present = A.API:Find(job.pending.guid, false)
     local complete = not present
     if job.kind == "mail" then
@@ -156,8 +193,10 @@ end
 
 function Ops:RefreshButtons()
     if self.sellButton then
+        local automatic = self.job and self.job.kind == "junk" and self.job.automatic
+        self.sellButton:SetText(automatic and "Stop Selling" or "Sell Marked Junk")
         self.sellButton:SetShown(A.IsEnabled() and A.merchantOpen == true)
-        self.sellButton:SetEnabled(not self.job and A.API:MerchantReady() and true or false)
+        self.sellButton:SetEnabled((automatic or not self.job) and A.API:MerchantReady() and true or false)
     end
     if self.mailButton then
         self.mailButton:SetShown(A.IsEnabled() and A.mailOpen == true)
@@ -182,10 +221,14 @@ end
 function Ops:CreateButtons()
     if A.InCombat() then return end
     if MerchantFrame and not self.sellButton then
-        self.sellButton = A.UI.Button(MerchantFrame, "Sell Marked Junk", 150, 0, 0, function() self:PreviewJunk() end)
+        self.sellButton = A.UI.Button(MerchantFrame, "Sell Marked Junk", 150, 0, 0, function()
+            if self.job and self.job.automatic then
+                self:Cancel("Automatic sale stopped. Remaining markings were kept.")
+            else self:PreviewJunk() end
+        end)
         self.sellButton:ClearAllPoints()
         self.sellButton:SetPoint("TOPLEFT", MerchantFrame, "BOTTOMLEFT", 14, -3)
-        A.UI.Tip(self.sellButton, "Sell Marked Junk", "Preview up to 12 explicitly marked stacks. Locked, Mail and uncertain stacks are excluded.")
+        A.UI.Tip(self.sellButton, "Sell Marked Junk", "Preview up to 12 explicitly marked stacks. Locked, Mail and uncertain stacks are excluded. During an automatic sale, click Stop Selling to keep the remaining items.")
     end
     if SendMailFrame and not self.mailButton then
         self.mailButton = A.UI.Button(SendMailFrame, "Attach Marked Items", 160, 0, 0, function() self:AttachMail() end)

@@ -5,7 +5,7 @@ A.Settings = SettingsUI
 function SettingsUI:Create()
     if self.frame then return end
     local UI = A.UI
-    local f = UI.Window("BagMarksSettings", "BagMarks", 420, 530)
+    local f = UI.Window("BagMarksSettings", "BagMarks " .. A.version, 420, 530)
     self.frame, self.checks, self.tabs, self.panels = f, {}, {}, {}
     for i, name in ipairs({ "General", "Marking", "Appearance" }) do
         local tab = name
@@ -41,11 +41,13 @@ function SettingsUI:Create()
 
     check(general, "enabled", "Enable BagMarks", 0)
     check(general, "minimap", "Show minimap button", -30)
-    UI.Label(general, "Mail", 0, -91, "GameFontNormal")
-    UI.Label(general, "Default recipient", 0, -129)
+    local autoSell = check(general, "autoSellJunk", "Automatically sell marked junk", -60)
+    UI.Tip(autoSell, "Automatic junk selling", "Starting with your next merchant visit, sell eligible items you marked as Junk without a confirmation. Locked, Mail, and unmarked items are excluded. Turn this off to stop remaining automatic sales.")
+    UI.Label(general, "Mail", 0, -121, "GameFontNormal")
+    UI.Label(general, "Default recipient", 0, -159)
     local recipient = CreateFrame("EditBox", nil, general, "InputBoxTemplate")
     recipient:SetSize(192, 24)
-    recipient:SetPoint("TOPLEFT", 178, -122)
+    recipient:SetPoint("TOPLEFT", 178, -152)
     recipient:SetAutoFocus(false)
     recipient:SetMaxLetters(100)
     recipient:SetScript("OnEnterPressed", function(widget) widget:ClearFocus() end)
@@ -56,8 +58,8 @@ function SettingsUI:Create()
     recipient:SetScript("OnEditFocusLost", function() A.Mail:QueueFill() end)
     UI.Tip(recipient, "Mail recipient", "Character or Character-Realm. Auto-fill uses this name only for a new, empty recipient. Replies and names you type are preserved.")
     self.recipient = recipient
-    check(general, "autoFillRecipient", "Automatically fill mail recipient", -164)
-    local mailNote = UI.Label(general, "Fills when Send Mail opens and after a successful send.\nExisting recipients and your edits are preserved.\n\nReview the recipient before using Blizzard's Send button.", 0, -204, "GameFontHighlightSmall")
+    check(general, "autoFillRecipient", "Automatically fill mail recipient", -194)
+    local mailNote = UI.Label(general, "Fills when Send Mail opens and after a successful send.\nExisting recipients and your edits are preserved.\n\nReview the recipient before using Blizzard's Send button.", 0, -234, "GameFontHighlightSmall")
     mailNote:SetWidth(370)
     mailNote:SetJustifyH("LEFT")
 
@@ -108,7 +110,7 @@ function SettingsUI:Create()
         end
     end
     UI.Label(appearance, "Themes update your bag and bank icons immediately.", 0, -190, "GameFontHighlightSmall")
-    local note = UI.Label(f, "Lock guards cover supported bag clicks outside combat.\nCursor deletion, macros and other addons can bypass them.", 24, -432, "GameFontHighlightSmall")
+    local note = UI.Label(f, "Locked reusable items can still be used. Unlock to move or transfer.\nSome direct game actions can bypass addon protection.", 24, -432, "GameFontHighlightSmall")
     note:SetWidth(370)
     note:SetJustifyH("LEFT")
     self.modeButton = UI.Button(f, "Item Marking Mode: Off", 220, 24, -480, function() A.ToggleMode() end)
@@ -172,8 +174,8 @@ function SettingsUI:RegisterCategory()
     if self.category or not Settings or not Settings.RegisterCanvasLayoutCategory or not Settings.RegisterAddOnCategory then return end
     local panel = CreateFrame("Frame", nil, UIParent)
     panel:Hide()
-    A.UI.Label(panel, "BagMarks", 20, -20, "GameFontNormalLarge")
-    A.UI.Label(panel, "Small item marks for Blizzard bags. Use /bm to open settings.", 20, -55)
+    A.UI.Label(panel, "BagMarks " .. A.version, 20, -20, "GameFontNormalLarge")
+    A.UI.Label(panel, "Mark items to keep, sell, or mail. Use /bm to open settings.", 20, -55)
     A.UI.Button(panel, "Open BagMarks Settings", 220, 20, -90, function()
         self:Create()
         self.frame:Show()

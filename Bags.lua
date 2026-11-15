@@ -3,27 +3,55 @@ local Bags = { overlays = {}, hooks = {} }
 A.Bags = Bags
 
 function Bags:Coordinates(button)
-    if button.GetBankTabID and button.GetContainerSlotID then
+    local shown = A.Ellesmere and A.Ellesmere.slots[button]
+    if shown then
+        return shown.bag, shown.slot
+    elseif button.GetBankTabID and button.GetContainerSlotID then
         return button:GetBankTabID(), button:GetContainerSlotID()
     elseif button.GetBagID and button.GetID then
         return button:GetBagID(), button:GetID()
     end
 end
 
+function Bags:Read(button)
+    if A.Ellesmere and A.Ellesmere.slots[button] then return A.Ellesmere:Read(button) end
+    local bag, slot = self:Coordinates(button)
+    return A.API:Read(bag, slot)
+end
+
 function Bags:RiskyContext()
-    return A.merchantOpen or A.mailOpen or (SpellIsTargeting and SpellIsTargeting())
+    return A.Protection:RiskyContext()
 end
 
 function Bags:Click(overlay, mouseButton)
     if not A.CanAct() then return end
-    local bag, slot = self:Coordinates(overlay.owner)
-    local item = A.API:Read(bag, slot)
+    local item = self:Read(overlay.owner)
+    local shown = A.Ellesmere and A.Ellesmere.slots[overlay.owner]
     if A.Interaction:Matches(mouseButton) then
-        if item then A.Interaction:Mark(overlay.owner, item)
+        if item and shown and shown.total then A.Ellesmere:OpenGroup(overlay.owner, item)
+        elseif item then A.Interaction:Mark(overlay.owner, item)
         else A.Print("No readable item GUID is available for this slot. No mark was saved.") end
+    elseif item and shown and shown.total then
+        A.Print("This group includes a Locked stack. Use the BagMarks menu to choose an individual stack, or switch to an unmerged bag view.")
     elseif item and A.Store:Get(item.guid) == "locked" then
-        A.Print("Locked. Clear its BagMarks mark before selling, mailing, or targeting it with a spell.")
+        A.Print("Locked. Close the current merchant, mail, trade, bank, or auction window and finish item targeting to use reusable items. Clear the mark to move or transfer this item.")
     end
+end
+
+function Bags:Layout(button, overlay)
+    local shown = A.Ellesmere and A.Ellesmere.slots[button]
+    local host = shown and shown.host or UIParent
+    -- EUI's host inherits scroll clipping and hidden/offline-view visibility.
+    -- Its list-row host covers the icon, not the full width of the row.
+    if overlay:GetParent() ~= host then overlay:SetParent(host) end
+    overlay:SetScale(button:GetEffectiveScale() / host:GetEffectiveScale())
+    overlay:SetAllPoints(button)
+    overlay:SetFrameStrata(button:GetFrameStrata())
+    overlay:SetFrameLevel(math.max(button:GetFrameLevel(), host:GetFrameLevel()) + 5)
+    overlay.icon:ClearAllPoints()
+    local iconSize = shown and host:GetWidth() < 28 and 12 or 14
+    overlay.icon:SetSize(iconSize, iconSize)
+    overlay.icon:SetPoint("TOPRIGHT", shown and host or overlay, "TOPRIGHT", -3, -3)
 end
 
 function Bags:Attach(button, force)
@@ -37,16 +65,10 @@ function Bags:Attach(button, force)
             return
         end
         overlay.owner = button
-        overlay:SetAllPoints(button)
-        overlay:SetFrameStrata(button:GetFrameStrata())
-        overlay:SetFrameLevel(button:GetFrameLevel() + 5)
-        overlay:SetScale(button:GetEffectiveScale() / UIParent:GetEffectiveScale())
         overlay:EnableMouse(true)
         overlay:SetMouseMotionEnabled(false) -- Blizzard retains hover/highlight/tooltips.
         overlay:RegisterForClicks("AnyUp")
         overlay.icon = overlay:CreateTexture(nil, "OVERLAY")
-        overlay.icon:SetSize(14, 14)
-        overlay.icon:SetPoint("TOPRIGHT", -3, -3)
         overlay:SetScript("OnClick", function(self, mouse) Bags:Click(self, mouse) end)
         -- Ancestor hide/show dispatches these as well. Pooled buttons are refreshed on reuse.
         button:HookScript("OnHide", function() overlay.seenVisible = false; overlay:Hide() end)
@@ -62,14 +84,19 @@ function Bags:Update(button)
     local overlay = self.overlays[button]
     if not overlay then return end
     if not A.CanAct() or not button:IsVisible() then overlay:Hide(); return end
+    self:Layout(button, overlay)
     local bag, slot = self:Coordinates(button)
     overlay.bag, overlay.slot, overlay.seenVisible = bag, slot, true
-    local item = A.API:Read(bag, slot)
+    local item = self:Read(button)
+    local shown = A.Ellesmere and A.Ellesmere.slots[button]
+    if shown and not item then overlay.icon:Hide(); overlay:Hide(); return end
     local state = item and A.Store:Get(item.guid)
+    local hasLocked = state == "locked"
+    if shown and shown.total then state, hasLocked = A.Ellesmere:GroupState(button, item) end
     overlay.icon:SetShown(state ~= nil and A.db.overlays)
     if state then A.PaintIcon(overlay.icon, state) end
     local marking = A.Interaction:Active()
-    local guard = state == "locked" and self:RiskyContext()
+    local guard = hasLocked and self:RiskyContext()
     local modifiedLeft = (IsShiftKeyDown() or IsControlKeyDown()) and not (SpellIsTargeting and SpellIsTargeting())
     local blocked, passthrough = {}, {}
     if marking then blocked[A.db.mouseButton] = true end
@@ -108,21 +135,37 @@ function Bags:Discover()
     if panel and panel:IsShown() and panel.EnumerateValidItems then
         for button in panel:EnumerateValidItems() do self:Attach(button) end
     end
+    if A.Ellesmere then A.Ellesmere:Discover() end
 end
 
 function Bags:Tooltip(tooltip)
     if not A.CanAct() or not A.db.tooltips then return end
     local owner = tooltip:GetOwner()
     if not owner or not self.overlays[owner] then return end
-    local bag, slot = self:Coordinates(owner)
-    local item = A.API:Read(bag, slot)
+    local item = self:Read(owner)
     if not item then return end
     local state = A.Store:Get(item.guid)
+    local shown = A.Ellesmere and A.Ellesmere.slots[owner]
+    if shown and shown.total then
+        local hasLocked, count, mixed
+        state, hasLocked, count, mixed = A.Ellesmere:GroupState(owner, item)
+        tooltip:AddLine("BagMarks: " .. (mixed and "Mixed marks" or (state and A.states[state] or "Normal"))
+            .. " (" .. count .. " stacks)", 1, .82, .3)
+        tooltip:AddLine("Use your marking shortcut to choose one stack. Each stack keeps its own mark.", 1, 1, 1, true)
+        if hasLocked then tooltip:AddLine("Includes a Locked stack. Clear that stack's mark before moving or transferring it. Reusable items can still be used.", 1, .72, .3, true) end
+        return
+    end
     if state then
         local color = A.Themes[A.db.theme][state]
         tooltip:AddLine("BagMarks: " .. A.states[state], color[1], color[2], color[3])
         if state == "locked" then
-            tooltip:AddLine("Bag click guard only. Cursor deletion, macros and other addons can bypass it.", 1, .72, .3, true)
+            if A.API:IsReusable(item.location) then
+                tooltip:AddLine("Reusable: can be used while Locked. Close merchant, mail, trade, bank, and auction windows and finish item targeting first.", 1, .72, .3, true)
+                tooltip:AddLine("Clear this mark before moving or transferring the item.", 1, .72, .3, true)
+            else
+                tooltip:AddLine("Clear this mark before moving, using, or transferring the item.", 1, .72, .3, true)
+            end
+            tooltip:AddLine("Some direct game actions can bypass addon protection.", 1, .72, .3, true)
         end
     end
     if A.char.review[item.guid] then
@@ -131,6 +174,7 @@ function Bags:Tooltip(tooltip)
 end
 
 function Bags:InstallHooks()
+    if A.Ellesmere then A.Ellesmere:Install() end
     local function hook(key, object, method, callback)
         if not self.hooks[key] and object and type(object[method]) == "function" then
             hooksecurefunc(object, method, callback)

@@ -1,12 +1,12 @@
 local addonName, A = ...
 A.name = addonName
-A.version = "1.1.0"
+A.version = "1.0.0"
 A.schema = 2
 A.states = { locked = "Locked", junk = "Junk", mail = "Mail" }
 A.defaults = {
     enabled = true, minimap = true, tooltips = true, overlays = true,
     modifier = "ALT", mouseButton = "RightButton", markingAction = "menu",
-    recipient = "", autoFillRecipient = true, theme = "Colorful", angle = 220,
+    recipient = "", autoFillRecipient = true, autoSellJunk = false, theme = "Colorful", angle = 220,
 }
 A.mode = false -- Intentionally session-only, to avoid surprising right clicks after login.
 
@@ -34,6 +34,7 @@ end
 
 function A.Refresh()
     if not A.ready then return end
+    A.Protection:Refresh()
     A.Bags:Discover()
     A.Bags:Refresh()
     A.Minimap:Refresh()
@@ -55,6 +56,7 @@ function A.SetOption(key, value)
         A.mode = false
         A.Operations:Cancel()
     end
+    if key == "autoSellJunk" and not value then A.Operations:CancelAutoSale() end
     if key == "autoFillRecipient" or key == "recipient" then A.Mail:QueueFill() end
     A.Refresh()
 end

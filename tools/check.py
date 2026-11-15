@@ -31,7 +31,8 @@ for path in sorted(root.glob("*.lua")) + sorted((root / "tests").glob("*.lua")):
     subprocess.run([args.luac, "-p", str(path)], check=True)
     source = path.read_text()
     if path.parent == root:
-        assert not re.search(r"\b(?:SendMail|DeleteCursorItem|RunMacroText)\s*\(", source), path
+        assert not re.search(r"\b(?:SendMail|DeleteCursorItem|RunMacroText|AcceptTrade)\s*\(", source), path
+        assert not re.search(r"\bC_Item\.(?:DeleteItem|ConfirmDeleteItem)\s*\(", source), path
         assert not re.search(r"(?:C_Container\.\w+|C_Item\.\w+|ContainerFrameItemButton_OnClick)\s*=", source), path
         assert "SetOverrideBinding" not in source
 for path in list(root.glob("*.lua")) + list(root.rglob("*.md")):

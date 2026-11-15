@@ -40,6 +40,12 @@ local function contains(list, value)
     return false
 end
 
+local function paintEllesmere(button, total)
+    local item = M.bags[button.bag] and M.bags[button.bag][button.slot]
+    EUI_Bags.RunItemOverlays(button, { bag = button.bag, slot = button.slot,
+        info = item and { itemID = item.itemID }, itemLink = item and item.link, _mergedCount = total })
+end
+
 test("clean login, defaults and Blizzard settings registration", function()
     eq(A.db.theme, "Colorful"); eq(A.db.modifier, "ALT"); eq(A.Bindings:Text(), "Unbound")
     eq(A.mode, false); eq(M.category.name, "BagMarks")
@@ -60,6 +66,15 @@ test("identical copies have independent marks", function()
     eq(A.Store:Get("Item-B"), nil)
     mark("Item-C", 0, 3, "junk")
     eq(A.Store:Get("Item-A"), "locked"); eq(A.Store:Get("Item-C"), "junk")
+end)
+
+test("delete confirmation returns a Locked cursor item synchronously", function()
+    local item = mark("Item-Keep", 0, 1, "locked")
+    M.forcePickup(0, 1) -- Simulate a cursor path that bypassed the native hold.
+    A.eventFrame:Fire("OnEvent", "DELETE_ITEM_CONFIRM", "Test item", 3, 1, 0, item.guid)
+    eq(M.cursor, nil, "destroy guard must return the item before the event finishes")
+    eq(M.bags[0][1], item); eq(M.clearCalls, 1)
+    eq(A.Store:Get(item.guid), "locked")
 end)
 
 test("missing and secret identities never fall back to item IDs", function()
@@ -140,6 +155,218 @@ test("theme changes repaint open bags and disabling icons removes overlays", fun
     A.SetOption("overlays", true); eq(icon:IsShown(), true)
 end)
 
+test("Ellesmere painter discovers items outside Blizzard container pools", function()
+    local eui = M.ellesmere()
+    A.Bags:InstallHooks()
+    assert(eui.itemOverlayIcons.BagMarks, "BagMarks must register with Ellesmere's item painter")
+    local item = M.item("Item-EUI", 0, 1)
+    local button = M.ellesmereButton(0, 1)
+    local nativeClick = button.scripts.OnClick
+    eui.RunItemOverlays(button, { bag = 0, slot = 1, info = { itemID = item.itemID }, itemLink = item.link })
+    eq(#M.containers, 0)
+    M.alt = true; A.eventFrame:Fire("OnEvent", "MODIFIER_STATE_CHANGED")
+    local overlay = assert(A.Bags.overlays[button], "Ellesmere item must get a marking overlay")
+    assert(overlay:IsVisible()); eq(overlay:GetParent(), button._textOverlay)
+    overlay:Fire("OnClick", "RightButton")
+    eq(M.menu.owner, button); M.menu.choices[1].callback()
+    eq(A.Store:Get(item.guid), "locked"); assert(overlay.icon:IsShown())
+    eq(button.scripts.OnClick, nativeClick); eq(M.nativeClicks, 0)
+end)
+
+test("Ellesmere registration handles late loading without replacing other painters", function()
+    local eui = M.ellesmere()
+    local other = function() end
+    eui.itemOverlayIcons.OtherAddon = other
+    A.eventFrame:Fire("OnEvent", "ADDON_LOADED", "EllesmereUIBags")
+    A.Bags:InstallHooks(); A.Bags:InstallHooks()
+    eq(eui.registrations, 1); eq(eui.itemOverlayIcons.OtherAddon, other)
+    assert(eui.itemOverlayIcons.BagMarks)
+end)
+
+test("Ellesmere copies reused paint data and clears placeholder slots", function()
+    local eui = M.ellesmere(); A.Bags:InstallHooks()
+    local first = mark("Item-A", 0, 1, "locked")
+    local second = mark("Item-B", 0, 2, "mail")
+    local one, two = M.ellesmereButton(0, 1), M.ellesmereButton(0, 2)
+    local data = { bag = 0, slot = 1, info = { itemID = first.itemID }, itemLink = first.link }
+    eui.RunItemOverlays(one, data)
+    data.slot, data.itemLink = 2, second.link
+    eui.RunItemOverlays(two, data)
+    eq(A.Bags:Read(one).guid, "Item-A"); eq(A.Bags:Read(two).guid, "Item-B")
+    data.bag, data.slot, data.info = 0, 0, nil
+    eui.RunItemOverlays(one, data)
+    M.alt = true; A.Bags:Refresh()
+    eq(A.Bags:Read(one), nil); eq(A.Bags.overlays[one]:IsShown(), false)
+    eq(A.Bags:Read(two).guid, "Item-B"); assert(A.Bags.overlays[two].icon:IsShown())
+end)
+
+test("Ellesmere list icons stay on the icon host and inherit scale and visibility", function()
+    local eui = M.ellesmere(); A.Bags:InstallHooks()
+    eui:SetScale(.8)
+    mark("Item-A", 0, 1, "junk")
+    local row = M.ellesmereButton(0, 1, true); paintEllesmere(row)
+    local overlay = A.Bags.overlays[row]
+    eq(overlay:GetEffectiveScale(), row:GetEffectiveScale())
+    eq(overlay.icon.point[2], row._textOverlay); eq(overlay.icon:GetWidth(), 12)
+    eq(overlay.anchored, row)
+    row:SetFrameLevel(50); row._textOverlay:SetFrameLevel(53); paintEllesmere(row)
+    assert(overlay:GetFrameLevel() > row._textOverlay:GetFrameLevel())
+    eui:Hide(); eq(overlay:IsVisible(), false)
+    eui:Show(); assert(overlay:IsVisible())
+    row._textOverlay:Hide(); eq(overlay:IsVisible(), false)
+end)
+
+test("Ellesmere marks, themes, tooltips and clearing update without a bag repaint", function()
+    M.ellesmere(); A.Bags:InstallHooks()
+    M.item("Item-A", 0, 1)
+    local button = M.ellesmereButton(0, 1); paintEllesmere(button)
+    local overlay = A.Bags.overlays[button]
+    GameTooltip:SetOwner(button)
+    for _, state in ipairs({ "locked", "junk", "mail" }) do
+        A.Store:Set(A.Bags:Read(button), state)
+        assert(overlay.icon:IsShown())
+        GameTooltip:SetBagItem(0, 1); eq(GameTooltip.lines[1], "BagMarks: " .. A.states[state])
+    end
+    A.SetOption("theme", "Minimal"); eq(overlay.icon.color[2], .8)
+    A.SetOption("overlays", false); eq(overlay.icon:IsShown(), false)
+    A.SetOption("overlays", true); assert(overlay.icon:IsShown())
+    A.Store:Set(A.Bags:Read(button), nil); eq(overlay.icon:IsShown(), false)
+    GameTooltip:SetBagItem(0, 1); eq(#GameTooltip.lines, 0)
+end)
+
+test("Ellesmere honors custom mouse gestures, cycling, mode and cursor drops", function()
+    M.ellesmere(); A.Bags:InstallHooks()
+    M.item("Item-A", 0, 1); M.item("Item-B", 0, 2)
+    local button = M.ellesmereButton(0, 1); paintEllesmere(button)
+    local overlay = A.Bags.overlays[button]
+    A.SetOption("mouseButton", "Button4"); A.SetOption("modifier", "ALT-SHIFT")
+    A.SetOption("markingAction", "cycle")
+    M.alt, M.shift = true, true; A.Bags:Refresh()
+    assert(contains(overlay.passthrough, "RightButton")); eq(contains(overlay.passthrough, "Button4"), false)
+    overlay:Fire("OnClick", "Button4"); eq(A.Store:Get("Item-A"), "junk")
+    M.alt, M.shift = false, false; A.ToggleMode()
+    overlay:Fire("OnClick", "Button4"); eq(A.Store:Get("Item-A"), "mail")
+    A.ToggleMode(); assert(contains(overlay.passthrough, "Button4"))
+    eq(A.Store:Get("Item-B"), nil)
+    M.alt, M.shift = true, true
+    M.cursor = { item = M.bags[0][2], bag = 0, slot = 2 }; A.Bags:Refresh()
+    assert(contains(overlay.passthrough, "Button4")); eq(M.nativeClicks, 0)
+end)
+
+test("Ellesmere bank and reagent items use their live slot identities", function()
+    M.ellesmere(); A.Bags:InstallHooks()
+    M.item("Item-Bank", 6, 2); M.item("Item-Reagent", 5, 3)
+    local bank, reagent = M.ellesmereButton(6, 2), M.ellesmereButton(5, 3)
+    paintEllesmere(bank); paintEllesmere(reagent)
+    eq(A.Bags:Read(bank), nil); eq(A.Bags:Read(reagent).guid, "Item-Reagent")
+    A.bankOpen = true; paintEllesmere(bank)
+    A.Store:Set(A.Bags:Read(bank), "locked"); assert(A.Bags.overlays[bank].icon:IsShown())
+    A.bankOpen = false; A.Bags:Refresh()
+    eq(A.Bags.overlays[bank]:IsShown(), false)
+    eq(A.Store:Get("Item-Bank"), "locked")
+end)
+
+test("Ellesmere repaints in combat defer frame creation and resume afterwards", function()
+    M.ellesmere(); A.Bags:InstallHooks()
+    mark("Item-A", 0, 1, "locked"); M.item("Item-B", 0, 2)
+    local one = M.ellesmereButton(0, 1); paintEllesmere(one)
+    M.combat = true; A.eventFrame:Fire("OnEvent", "PLAYER_REGEN_DISABLED")
+    local two = M.ellesmereButton(0, 2); paintEllesmere(two)
+    eq(A.Bags.overlays[one]:IsShown(), false); eq(A.Bags.overlays[two], nil)
+    M.combat = false; A.eventFrame:Fire("OnEvent", "PLAYER_REGEN_ENABLED"); M.tick(0)
+    assert(A.Bags.overlays[one].icon:IsShown()); assert(A.Bags.overlays[two])
+end)
+
+test("Ellesmere rejects stale or unreadable slot metadata", function()
+    local eui = M.ellesmere(); A.Bags:InstallHooks()
+    M.item("Item-A", 0, 1); M.item("Item-B", 0, 2, { itemID = 200 })
+    local button = M.ellesmereButton(0, 1); paintEllesmere(button)
+    button.slot = 2
+    eq(A.Bags:Read(button), nil)
+    paintEllesmere(button); eq(A.Bags:Read(button).guid, "Item-B")
+    eui.RunItemOverlays(button, { bag = M.secret, slot = 2, info = { itemID = 200 } })
+    eq(A.Bags:Read(button), nil); eq(A.Bags.overlays[button]:IsShown(), false)
+    eui.RunItemOverlays(button, { bag = 0, slot = 2, info = M.secret })
+    eq(A.Bags:Read(button), nil)
+end)
+
+test("Ellesmere grouped clicks choose a GUID even with cycle mode enabled", function()
+    M.ellesmere(); A.Bags:InstallHooks()
+    M.item("Item-A", 0, 1, { count = 5 }); M.item("Item-B", 0, 2, { count = 7 })
+    A.Store:RefreshInventory()
+    local button = M.ellesmereButton(0, 1); paintEllesmere(button, 12)
+    A.SetOption("markingAction", "cycle"); M.alt = true; A.Bags:Refresh()
+    local overlay = A.Bags.overlays[button]
+    overlay:Fire("OnClick", "RightButton")
+    eq(A.Store:Get("Item-A"), nil); eq(#M.menu.children, 2)
+    M.menu.children[2].choices[1].callback()
+    eq(A.Store:Get("Item-A"), nil); eq(A.Store:Get("Item-B"), "locked")
+    eq(overlay.icon:IsShown(), false, "mixed group must not appear fully Locked")
+    GameTooltip:SetOwner(button); GameTooltip:SetBagItem(0, 1)
+    assert(GameTooltip.lines[1]:find("Mixed marks")); assert(GameTooltip.lines[3]:find("Locked"))
+    M.menu.children[1].choices[1].callback(); assert(overlay.icon:IsShown())
+    M.menu.children[2].choices[4].callback(); eq(overlay.icon:IsShown(), false)
+    eq(A.Store:Get("Item-A"), "locked"); eq(A.Store:Get("Item-B"), nil)
+end)
+
+test("Ellesmere grouped choices follow moved GUIDs and exclude variants and banks", function()
+    M.ellesmere(); A.Bags:InstallHooks()
+    local one = M.item("Item-A", 0, 1); M.item("Item-B", 1, 1)
+    local variant = M.item("Item-Variant", 0, 2)
+    variant.link = "|Hitem:100:variant|h[Variant]|h"
+    M.item("Item-Bank", 6, 1); A.bankOpen = true; A.Store:RefreshInventory()
+    local button = M.ellesmereButton(0, 1); paintEllesmere(button, 2)
+    M.alt = true; A.Bags:Refresh(); A.Bags.overlays[button]:Fire("OnClick", "RightButton")
+    eq(#M.menu.children, 2)
+    M.bags[0][3], M.bags[0][1] = one, nil
+    M.item("Item-Replacement", 0, 1)
+    M.menu.children[1].choices[2].callback()
+    eq(A.Store:Get("Item-A"), "junk"); eq(A.Store:Get("Item-Replacement"), nil)
+    eq(A.Store:Get("Item-Variant"), nil); eq(A.Store:Get("Item-Bank"), nil)
+end)
+
+test("Ellesmere grouped guards notice a Locked nonrepresentative stack", function()
+    M.ellesmere(); A.Bags:InstallHooks()
+    M.item("Item-A", 0, 1); mark("Item-B", 0, 2, "locked")
+    local button = M.ellesmereButton(0, 1); paintEllesmere(button, 2)
+    local overlay = A.Bags.overlays[button]
+    A.mailOpen = true; A.Bags:Refresh()
+    assert(overlay:IsShown()); eq(contains(overlay.passthrough, "RightButton"), false)
+    overlay:Fire("OnClick", "RightButton"); assert(M.messages[#M.messages]:find("Locked stack"))
+    A.mailOpen = false; A.Bags:Refresh(); assert(contains(overlay.passthrough, "RightButton"))
+    A.Store:Set(A.API:Read(0, 1), "locked"); A.inventory = {}
+    A.merchantOpen = true; A.Bags:Refresh()
+    eq(contains(overlay.passthrough, "RightButton"), false, "live Locked GUID survives a missing group snapshot")
+end)
+
+test("Ellesmere selected marks feed sale and mail helpers without Locked copies", function()
+    M.ellesmere(); A.Bags:InstallHooks()
+    for i = 1, 3 do M.item("Item-" .. i, 0, i) end
+    A.Store:RefreshInventory()
+    local button = M.ellesmereButton(0, 1); paintEllesmere(button, 3)
+    M.alt = true; A.Bags:Refresh(); A.Bags.overlays[button]:Fire("OnClick", "RightButton")
+    M.menu.children[1].choices[2].callback()
+    M.menu.children[2].choices[1].callback()
+    M.menu.children[3].choices[3].callback()
+    M.alt = false; merchant(); A.Operations:PreviewJunk(); confirm(); M.tick(1)
+    eq(#M.sold, 1); eq(M.sold[1], "Item-1")
+    A.merchantOpen = false; MerchantFrame:Hide(); mail(); A.Operations:AttachMail(); M.tick(1)
+    eq(M.attachments[1].guid, "Item-3"); eq(M.bags[0][2].guid, "Item-2")
+    eq(A.Store:Get("Item-2"), "locked")
+end)
+
+test("Ellesmere grouped menus scroll and unchanged discovery does not poll GUIDs", function()
+    M.ellesmere(); A.Bags:InstallHooks()
+    for i = 1, 12 do M.item("Item-" .. i, 0, i) end
+    A.Store:RefreshInventory()
+    local button = M.ellesmereButton(0, 1); paintEllesmere(button, 12)
+    local reads = M.reads
+    for _ = 1, 20 do A.Bags:Discover() end
+    eq(M.reads, reads)
+    M.alt = true; A.Bags:Refresh(); A.Bags.overlays[button]:Fire("OnClick", "RightButton")
+    eq(#M.menu.children, 12); eq(M.menu.scrollHeight, 300)
+end)
+
 test("native bank pool and reused bag buttons read their current coordinates", function()
     mark("Item-A", 6, 2, "mail"); A.bankOpen = true; BankFrame:Show()
     local bankButton = M.button(6, 2, true)
@@ -184,11 +411,11 @@ test("tooltips show only the actual instance and obey the toggle", function()
     button.slot = 1; A.SetOption("tooltips", false); GameTooltip:SetBagItem(0, 1); eq(#GameTooltip.lines, 0)
 end)
 
-test("locked click guards cover merchant, mail and spell targets; normal drag remains native", function()
+test("locked click guards cover merchant, mail, trade and spell targets", function()
     mark("Item-A", 0, 1, "locked")
     local button = M.button(0, 1); A.Bags:Discover(); local overlay = A.Bags.overlays[button]
     eq(contains(overlay.passthrough, "LeftButton"), true)
-    for _, context in ipairs({ "merchantOpen", "mailOpen" }) do
+    for _, context in ipairs({ "merchantOpen", "mailOpen", "tradeOpen" }) do
         A[context] = true; A.Bags:Refresh(); eq(contains(overlay.passthrough, "LeftButton"), false)
         A[context] = false
     end
@@ -635,5 +862,9 @@ test("standard AddOns menu callbacks operate even when the minimap button is hid
     BagMarks_OnAddonCompartmentLeave(); eq(GameTooltip:IsShown(), false)
     eq(A.Minimap.button:IsShown(), false)
 end)
+
+dofile("tests/protection.lua")(M, A, test, eq, mark)
+dofile("tests/reusable.lua")(M, A, test, eq, mark)
+dofile("tests/autosell.lua")(M, A, test, eq, mark)
 
 print(string.format("%d mocked tests passed under %s. No in-game or taint testing was performed.", passed, _VERSION))

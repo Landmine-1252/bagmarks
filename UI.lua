@@ -82,29 +82,44 @@ function UI:CloseConfirmation()
     if self.confirm then self.confirm:Hide() end
 end
 
-function UI:ItemMenu(owner, item)
+function UI:ItemChoices(root, item)
+    local guid = item.guid
+    if A.char.review[guid] then root:CreateTitle("Stack changed. Reapply a mark to review.") end
+    local choices = {
+        { "Lock Item", "locked" }, { "Mark as Junk", "junk" },
+        { "Mark for Mail", "mail" }, { "Clear Mark", false },
+    }
+    for _, choice in ipairs(choices) do
+        local state = choice[2] or nil
+        root:CreateRadio(choice[1], function() return A.Store:Get(guid) == state end, function()
+            if not A.CanAct() then return end
+            -- Menus bind to identity, never the slot that happened to open them.
+            local current = A.API:Find(guid, true)
+            if current then A.Store:Set(current, state)
+            else A.Print("That item is no longer available. Open its menu again.") end
+        end)
+    end
+end
+
+function UI:ItemMenu(owner, item, stacks)
     if not A.CanAct() or not item then return end
     if not MenuUtil or not MenuUtil.CreateContextMenu then
         A.Print("This client does not expose Blizzard's context menu API.")
         return
     end
-    local guid = item.guid
     MenuUtil.CreateContextMenu(owner, function(_, root)
         root:CreateTitle("BagMarks")
-        if A.char.review[guid] then root:CreateTitle("Stack changed. Reapply a mark to review.") end
-        local choices = {
-            { "Lock Item", "locked" }, { "Mark as Junk", "junk" },
-            { "Mark for Mail", "mail" }, { "Clear Mark", false },
-        }
-        for _, choice in ipairs(choices) do
-            local state = choice[2] or nil
-            root:CreateRadio(choice[1], function() return A.Store:Get(guid) == state end, function()
-                if not A.CanAct() then return end
-                -- Menus bind to identity, never the slot that happened to open them.
-                local current = A.API:Find(guid, true)
-                if current then A.Store:Set(current, state)
-                else A.Print("That item is no longer available. Open its menu again.") end
-            end)
+        if stacks then
+            root:CreateTitle("Choose one stack")
+            if #stacks > 10 then root:SetScrollMode(300) end
+            for _, stack in ipairs(stacks) do
+                local location = stack.bag == 0 and "Backpack" or ("Bag " .. stack.bag)
+                local state = A.Store:Get(stack.guid)
+                local label = location .. ", slot " .. stack.slot .. " (" .. stack.count .. ") - " .. (A.states[state] or "Normal")
+                self:ItemChoices(root:CreateButton(label), stack)
+            end
+        else
+            self:ItemChoices(root, item)
         end
     end)
 end

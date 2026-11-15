@@ -46,7 +46,7 @@ local function initialize()
     queueRefresh()
 end
 
-frame:SetScript("OnEvent", function(_, event, arg1)
+frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
     if event == "ADDON_LOADED" then
         if arg1 == addonName then initialize()
         elseif A.ready then
@@ -59,7 +59,13 @@ frame:SetScript("OnEvent", function(_, event, arg1)
         return
     end
     if not A.ready then return end
-    if event == "PLAYER_REGEN_DISABLED" then
+    if event == "DELETE_ITEM_CONFIRM" then
+        A.Protection:ReturnCursor(arg5, true)
+        A.Protection:SyncHolds()
+    elseif event == "PLAYER_LOGOUT" then
+        A.Operations:Cancel()
+        A.Protection:Stop()
+    elseif event == "PLAYER_REGEN_DISABLED" then
         A.mode = false
         A.Bindings:StopCapture()
         A.Operations:Cancel()
@@ -70,16 +76,35 @@ frame:SetScript("OnEvent", function(_, event, arg1)
         A.Mail:QueueFill()
         queueRefresh()
     elseif event == "MERCHANT_SHOW" then
+        local opening = not A.merchantOpen
         A.merchantOpen = true
+        A.Protection:SyncHolds() -- Protect reusable items before deferred UI/sale work.
+        if opening then A.Protection:MerchantOpened() end
         A.Store:RefreshInventory()
         A.Operations:CreateButtons()
         queueRefresh()
+        if opening then A.Operations:AutoSellJunk() end
     elseif event == "MERCHANT_CLOSED" then
         A.merchantOpen = false
+        A.Protection:MerchantClosed()
         A.Operations:Cancel()
         A.Refresh()
+    elseif event == "MERCHANT_UPDATE" then
+        A.Protection:CheckBuyback()
+        queueRefresh()
+    elseif event == "TRADE_SHOW" then
+        A.tradeOpen = true
+        A.Protection:Refresh()
+        A.Bags:Refresh()
+    elseif event == "TRADE_CLOSED" then
+        A.tradeOpen = false
+        A.Protection:SyncHolds()
+        A.Bags:Refresh()
+    elseif event == "TRADE_PLAYER_ITEM_CHANGED" or event == "TRADE_ACCEPT_UPDATE" or event == "TRADE_UPDATE" then
+        A.Protection:CheckTrade()
     elseif event == "MAIL_SHOW" then
         A.mailOpen = true
+        A.Protection:Refresh()
         A.Mail:InstallHooks()
         A.Mail:NewDraft()
         A.Operations:CreateButtons()
@@ -92,27 +117,45 @@ frame:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "MAIL_SEND_SUCCESS" then
         A.Operations:Cancel()
         A.Mail:NewDraft()
+    elseif event == "MAIL_SEND_INFO_UPDATE" then
+        A.Protection:CheckMail()
+        queueRefresh()
     elseif event == "BANKFRAME_OPENED" then
         A.bankOpen = true
+        A.Protection:SyncHolds()
         queueRefresh()
     elseif event == "BANKFRAME_CLOSED" then
         A.bankOpen = false
+        A.Protection:SyncHolds()
         queueRefresh()
-    elseif event == "MODIFIER_STATE_CHANGED" or event == "CURSOR_CHANGED" then
+    elseif event == "AUCTION_HOUSE_SHOW" or event == "AUCTION_HOUSE_CLOSED" then
+        A.auctionOpen = event == "AUCTION_HOUSE_SHOW"
+        A.Protection:SyncHolds()
+        queueRefresh()
+    elseif event == "MODIFIER_STATE_CHANGED" or event == "CURSOR_CHANGED" or event == "CURRENT_SPELL_CAST_CHANGED" then
+        if event == "CURSOR_CHANGED" then A.Protection:ReturnCursor() end
+        if event ~= "MODIFIER_STATE_CHANGED" then A.Protection:SyncHolds() end
         A.Bags:Refresh()
         A.Operations:RefreshButtons()
     elseif event == "UPDATE_BINDINGS" then A.Settings:Refresh()
     elseif event == "UI_ERROR_MESSAGE" then
         if A.Operations.job then A.Operations:Cancel("The client reported an error. Remaining markings were kept.") end
-    else queueRefresh() end
+    else
+        if event == "ITEM_LOCK_CHANGED" or event == "BAG_UPDATE_DELAYED" then A.Protection:SyncHolds() end
+        if event == "BAG_UPDATE_DELAYED" then A.Protection:CheckBuyback() end
+        queueRefresh()
+    end
 end)
 
 for _, event in ipairs({
-    "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_LOGOUT", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
     "BAG_UPDATE_DELAYED", "BAG_CONTAINER_UPDATE", "BAG_OPEN", "BAG_CLOSED", "ITEM_LOCK_CHANGED",
     "PLAYERBANKSLOTS_CHANGED", "PLAYER_ACCOUNT_BANK_TAB_SLOTS_CHANGED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED",
     "MERCHANT_SHOW", "MERCHANT_CLOSED", "MERCHANT_UPDATE", "MAIL_SHOW", "MAIL_CLOSED", "MAIL_SEND_INFO_UPDATE", "MAIL_SEND_SUCCESS",
     "MODIFIER_STATE_CHANGED", "CURSOR_CHANGED", "UPDATE_BINDINGS", "UI_ERROR_MESSAGE",
+    "DELETE_ITEM_CONFIRM", "TRADE_SHOW", "TRADE_CLOSED", "TRADE_PLAYER_ITEM_CHANGED", "TRADE_ACCEPT_UPDATE", "TRADE_UPDATE",
+    "CURRENT_SPELL_CAST_CHANGED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",
+    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
 }) do
     -- Event names can differ between client revisions; capability failure is nonfatal.
     pcall(frame.RegisterEvent, frame, event)
@@ -129,6 +172,6 @@ frame:SetScript("OnUpdate", function(_, delta)
     elapsed = 0
     A.Bags:Discover()
     local risk = A.Bags:RiskyContext() and true or false
-    if risk ~= lastRisk then A.Bags:Refresh(); lastRisk = risk end
+    if risk ~= lastRisk then A.Protection:SyncHolds(); A.Bags:Refresh(); lastRisk = risk end
     A.Operations:RefreshButtons()
 end)

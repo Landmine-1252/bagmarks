@@ -77,6 +77,23 @@ function API:Find(guid, includeBank)
     return items[guid]
 end
 
+function API:IsReusable(location)
+    -- Never infer safety from an item name, class, cooldown or usability today.
+    -- Read the live item's link and require cached data, a use effect and the
+    -- client's explicit nonconsumable result. Unknown/secret data stays held.
+    if not C_Item or type(C_Item.GetItemLink) ~= "function" or type(C_Item.GetItemInfo) ~= "function"
+        or type(C_Item.GetItemSpell) ~= "function" or type(C_Item.IsConsumableItem) ~= "function" then return false end
+    local linkOK, link = pcall(C_Item.GetItemLink, location)
+    if not linkOK or not A.Safe(link) or type(link) ~= "string" or link == "" then return false end
+    local infoOK, name = pcall(C_Item.GetItemInfo, link)
+    if not infoOK or not A.Safe(name) or type(name) ~= "string" or name == "" then return false end
+    local spellOK, spellName, spellID = pcall(C_Item.GetItemSpell, link)
+    if not spellOK or not A.Safe(spellName) or not A.Safe(spellID)
+        or type(spellName) ~= "string" or spellName == "" or type(spellID) ~= "number" or spellID <= 0 then return false end
+    local consumableOK, consumable = pcall(C_Item.IsConsumableItem, link)
+    return consumableOK and A.Safe(consumable) and consumable == false
+end
+
 function API:IsQuest(item)
     if not C_Container.GetContainerItemQuestInfo then return true end
     local ok, info = pcall(C_Container.GetContainerItemQuestInfo, item.bag, item.slot)
@@ -111,6 +128,7 @@ end
 function API:MerchantReady()
     return A.CanAct() and A.merchantOpen and MerchantFrame and MerchantFrame:IsShown()
         and MerchantFrame.selectedTab == 1 and not GetCursorInfo()
+        and not (SpellIsTargeting and SpellIsTargeting())
 end
 
 function API:MailReady()

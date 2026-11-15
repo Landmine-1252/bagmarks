@@ -1,32 +1,44 @@
-# Changelog
+# BagMarks Changelog
 
-## 1.1.0 - 2026-11-14
+## 1.0.0 - Initial release
 
-- Add a distinctive satchel logo to the minimap button, AddOns entry, and README, with gold, red, and blue details for the three marks.
-- Rewrite the README with a short introduction and player-focused installation and usage instructions.
-- Automatically fill a configured recipient when Send Mail opens and after a successful send. Preserve reply recipients, existing names, deliberate edits and cleared fields. Add an autofill toggle.
-- Support Left, Right, Middle, Mouse Button 4 and Mouse Button 5, combined with Alt/Ctrl/Shift combinations, no modifier, or marking-mode-only input.
-- Add optional click-to-cycle marking: Normal > Junk > Mail > Locked > Normal. Changed stacks still require menu review.
-- Organize settings into compact General, Marking and Appearance tabs.
-- Stop re-showing and repositioning collector-managed minimap buttons during ordinary refresh. Preserve collectors' update scripts and disable invisible button hit targets. Audit Ellesmere's collector and flyout source.
-- Register a standard Blizzard AddOns compartment entry without replacing its menu button.
-- Preserve saved false preferences correctly and migrate schema 1 settings to schema 2 without changing existing marks or the default gesture.
-- Stop an active attachment queue when the player sends mail, so leftovers cannot enter the next draft automatically.
-- Expand validation to 62 mocked Lua 5.1 tests, including recipient lifecycle, configurable gestures, cycling and collector interactions.
+Prepared for **WoW: Forever 1.60.1**. CurseForge approval is still pending; there has not yet been a public release. All fixes below are included in version 1.0.0.
 
-In-game Ellesmere, native input, visual and taint verification remain pending.
+### Added
 
-## 1.0.0 - 2026-11-14
+- **Item marks:** Mark individual items or stacks as Locked, Junk, or Mail, with small bag icons and tooltip labels.
+- **Locked-item protection:** Add safeguards against accidental selling, destruction, trading, and mailing. Clear the mark before moving or transferring a Locked item. Recognized reusable items can still be used.
+- **Automatic junk selling:** Optionally sell eligible marked Junk when visiting a merchant, with a **Stop Selling** button to keep the remaining items.
+- **Manual junk selling:** Preview and confirm up to 12 marked stacks at a time. Locked, Mail, and unmarked items are excluded from both sale methods.
+- **Mail helper:** Attach eligible Mail items and automatically fill a configured default recipient. Review the mail and press Send yourself.
+- **Custom controls:** Choose modifier keys and mouse buttons, or cycle through marks with each marking click.
+- **Item Marking Mode:** Mark items without holding a modifier, with an optional keyboard shortcut.
+- **Three icon themes:** Choose Classic, Minimal, or Colorful and see changes immediately.
+- **Minimap button:** Open settings, toggle marking mode, and drag the button into position. Support for common minimap button collectors.
+- **Bag support:** Integrate with Blizzard bags and banks, plus EllesmereUI Bags. Choose individual stacks in Ellesmere's combined item views.
+- **Saved preferences:** Keep settings across characters and save item marks separately for each character.
+- **Version display:** Show the installed version in settings and minimap/AddOns-menu tooltips.
 
-- Initial Forever 1.60.1 release, interface 16001, using verified modern API names.
-- Per-character GUID marks for Locked, Junk, and Mail; no item-ID fallback.
-- Native bag and pooled-bank integration, tooltips, modifier menus, and Item Marking Mode.
-- Conservative stack review flags for splits, merges, and uncertain inventory changes.
-- Confirmed merchant batches with per-action revalidation and an eligible mail attachment helper.
-- Scoped Locked-item click guards, including the native Sell All Junk button, with documented bypasses.
-- Compact native settings, keyboard capture with conflict rejection, and a draggable minimap button.
-- Classic, Minimal, and Colorful themes with original transparent icons.
-- Validated SavedVariables, schema-zero migration, and protection against newer-data downgrades.
-- Lua 5.1 mocked regression tests, static checks, packaging tooling, and a reproducible client checklist.
+### Fixes before the first release
 
-No in-game runtime, taint, or visual compatibility results are claimed for this release.
+- Allow locked reusable items, such as the sleeping bag, to be used without clearing their mark when the game identifies them as nonconsumable.
+- Keep reusable items held while merchant, mail, trade, bank, or auction windows are open, and during item-targeting spells. Cursor and deletion safeguards remain active between uses.
+- Keep stricter locks on consumables and items with missing or unreadable information. Locked items remain excluded from BagMarks' sale and mail helpers.
+- Update tooltips to explain when a Locked item can still be used.
+- Rebuild the release ZIP with explicit folders and standard file metadata, and validate its contents before replacing the previous build.
+- Update installation and upload instructions. The file to upload is **BagMarks-1.0.0.zip** from the `dist` folder.
+
+### Getting started
+
+- Hold **Alt** and **right-click** an item to choose its mark.
+- Open settings with `/bm` or `/bagmarks`.
+- Automatic junk selling is **off by default**. Enable it under **General → Automatically sell marked junk**.
+
+### Known limitations
+
+- Some game actions and other addons can bypass Locked-item protection. See the [protection limits](docs/API_COMPATIBILITY.md).
+- Keep the icon column visible when using Ellesmere's List view.
+- **175 Lua 5.1 mock tests**, **10 archive tests**, and static checks have passed. In-game behavior, the sleeping bag's item data, visuals, and taint verification remain pending. See the [testing checklist](docs/TESTING.md).
+- Local archive validation cannot confirm CurseForge acceptance. The corrected package still needs to pass its upload checks.
+
+Licensed under the [MIT License](LICENSE). Earlier build notes are preserved in the [development history](docs/DEVELOPMENT_HISTORY.md).

@@ -48,12 +48,12 @@ end
 
 function Mini:Tooltip(owner, draggable)
     GameTooltip:SetOwner(owner, "ANCHOR_LEFT")
-    GameTooltip:SetText("BagMarks")
+    GameTooltip:SetText("BagMarks " .. A.version)
     GameTooltip:AddLine("Item Marking Mode: " .. (A.mode and "On" or "Off"), .4, .8, 1)
     GameTooltip:AddLine("Left Click: Settings\nRight Click: Toggle marking mode", 1, 1, 1)
     if draggable then GameTooltip:AddLine("Drag: Move minimap button", 1, 1, 1) end
     GameTooltip:AddLine(A.Interaction:Hint(), 1, .82, .3)
-    if A.InCombat() then GameTooltip:AddLine("Item marking and guards pause during combat.", 1, .5, .3) end
+    if A.InCombat() then GameTooltip:AddLine("Marking and bag click guards pause in combat. Native item holds remain requested.", 1, .5, .3, true) end
     GameTooltip:Show()
 end
 

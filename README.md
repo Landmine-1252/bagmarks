@@ -4,65 +4,70 @@ Mark what you want to keep, sell, or mail, right in your WoW Forever bags.
 
 <img src="https://raw.githubusercontent.com/Landmine-1252/bagmarks/refs/heads/main/Media/BagMarks.png" alt="BagMarks: a leather satchel with a gold lock and red and blue marking tabs" width="144" height="144">
 
-**Version 1.0.1** · **WoW: Forever 1.60.1**
+Works with Blizzard bags and banks, plus EllesmereUI Bags.
 
-Small icons for Blizzard bags and banks or EllesmereUI Bags. No extra inventory window or dependencies.
+## Mark your items
 
-CurseForge approval is still pending.
-
-## Default controls
-
-| Control | Action |
-| --- | --- |
-| **Alt + Right Click** an item | Open its marking menu |
-| **Left Click** the minimap button | Open or close settings |
-| **Right Click** the minimap button | Toggle Item Marking Mode |
-| **Left-drag** the minimap button | Move it around the minimap |
-| **`/bm`** or **`/bagmarks`** | Open or close settings |
-
-**Item Marking Mode starts off.** Turn it on for plain right-click marking; turn it off to restore ordinary right-clicks. A blue minimap indicator shows when active. Login or `/reload` turns it off.
-
-On a fresh install, the keyboard shortcut is **unbound**. The minimap button, item icons, and tooltip labels are on, using the **Colorful** theme.
-
-## Choose a mark
-
-Marks belong to the selected item or stack, with an icon and tooltip label. Identical copies keep their own marks.
+Open your bags and **Alt + Right Click** an item to choose a mark:
 
 | Mark | Icon | Purpose |
 | --- | --- | --- |
 | Locked | Gold padlock | Help protect the item from loss |
 | Junk | Red trash can | Set aside for selling |
 | Mail | Blue envelope | Set aside for mailing |
-| Clear Mark | None | Return the item to Normal |
+| Clear Mark | None | Remove the mark |
 
-**Selling:** At a merchant, click **Sell Marked Junk**, review up to 12 stacks, and confirm. Automatic selling starts **off**; enable it in `/bm` → **General** for your next visit. **Stop Selling** cancels remaining sales. Only eligible Junk is sold; Locked, Mail, and unmarked items are excluded.
+![BagMarks inventory icons showing Mail, Junk, Locked, and an unmarked item](https://raw.githubusercontent.com/Landmine-1252/bagmarks/refs/heads/main/Media/ItemMarks.png)
 
-**Mailing:** Autofill starts **on**, with no recipient set. Add a **Default recipient** in **General** to fill empty Send Mail recipients. Replies and your edits are preserved. At a mailbox, click **Attach Marked Items** for eligible Mail items. Bound items are skipped; unsent items keep their marks. **Review the mail and press Send yourself.** Sending is never automatic.
+From left to right: **Mail**, **Junk**, **Locked**, and **Normal** (unmarked), using the Colorful theme.
 
-## Keeping items safe
+The menu checks your current mark. Repeat the shortcut to change or clear it. Identical copies keep separate marks.
 
-Clear Locked marks before moving or transferring items. Recognized reusables, such as your sleeping bag, remain usable while Locked. Close merchant, mail, trade, bank, and auction windows and finish item-targeting spells first. Consumables and unrecognized items stay unusable while Locked.
+## Configure BagMarks
 
-Some game actions and other addons can bypass protection. Disabling BagMarks stops it. See the [protection limits and buyback behavior](docs/API_COMPATIBILITY.md).
+Type **`/bm`** or **`/bagmarks`**, or **Left Click** the minimap button, to open settings.
 
-## Customize your controls
+| Tab | What you can change |
+| --- | --- |
+| **General** | Enable BagMarks, show the minimap button, set up automatic junk selling, and configure mail autofill |
+| **Marking** | Choose modifier keys, a mouse button, the click action, and a shortcut for Item Marking Mode |
+| **Appearance** | Toggle icons and tooltip labels; preview **Classic**, **Minimal**, or **Colorful** themes |
 
-In `/bm` → **Marking**, choose your modifier keys and mouse button. For Diablo-style marking, choose **Cycle marks**: **Normal → Locked → Junk → Mail → Normal**. The first click locks an unmarked item. **Set Key** lets you bind the mode toggle without overwriting another shortcut.
+The minimap button, icons, and tooltip labels start on, with **Colorful** selected. Appearance changes apply immediately. **Left-drag** the minimap button to move it.
 
-Under **Appearance**, choose **Classic**, **Minimal**, or **Colorful** icons. Changes apply immediately.
+**Marking controls:** Choose your modifier combination and mouse button in **Marking** if Alt + Right Click conflicts with another addon. **None** needs no modifier; **Marking Mode only** enables marking only while the mode is on.
 
-## Install
+**Cycle marks:** Set **Marking → Click action → Cycle marks** for Diablo-style marking: **Normal → Locked → Junk → Mail → Normal**. An unmarked item locks first.
 
-1. Extract **BagMarks-1.0.1.zip** into `Interface/AddOns`. The file should be at `Interface/AddOns/BagMarks/BagMarks.toc`.
-2. Restart WoW Forever and enable **BagMarks** in the AddOns list.
+**Keyboard shortcut:** In **Marking**, click **Set Key**, then press a key combination. Escape cancels. **Clear** removes the binding; **Restore** undoes your last binding change this session. It starts **unbound** and won't replace another shortcut.
 
-Use the packaged addon ZIP; GitHub's **Download ZIP** contains the source project. To update, replace the **BagMarks** folder. Saved preferences and marks are kept.
+## Mark several items quickly
+
+**Right Click** the minimap button or use **`/bm mode`** to toggle Item Marking Mode. It uses your selected mouse button without a modifier: plain right-click by default.
+
+A blue minimap indicator shows when active. Turn it off to return to your configured shortcut. It starts off and switches off on login, `/reload`, or entering combat.
+
+## Sell marked junk
+
+Visit a merchant, click **Sell Marked Junk**, and confirm the preview of up to 12 stacks. Only eligible items marked **Junk** are sold.
+
+Enable **General → Automatically sell marked junk** to sell without confirmation from your next merchant visit. This starts **off**. Click **Stop Selling** to keep remaining items. Locked, Mail, and unmarked items are excluded.
+
+## Mail marked items
+
+1. In **General**, enter a **Default recipient**, using `Character` or `Character-Realm`.
+2. Enable **Automatically fill mail recipient** (on by default). It fills empty recipients and preserves replies and typed names.
+3. At a mailbox, open **Send Mail** and click **Attach Marked Items**.
+4. Review the recipient and attachments, then click Blizzard's **Send** button yourself.
+
+The helper attaches eligible **Mail** items while space remains. Bound items are skipped; unsent items keep their marks.
 
 ## A few things to know
 
-- Settings are shared across characters; item marks are saved per character. Check marks after splitting or merging stacks.
-- Marking and sale/mail helpers pause during combat. Existing item icons stay visible when readable; new slots may wait until combat ends. Settings remain accessible.
-- **EllesmereUI Bags:** keep the icon column visible in List view. Combined stacks let you choose which stack to mark. If Alt conflicts with Ellesmere's controls, choose another shortcut or use Marking Mode.
+- **Locked items:** Clear the mark before moving or transferring them. Some actions and addons bypass protection. A Cozy Sleeping Bag usability issue is under investigation; see the [protection limits](docs/API_COMPATIBILITY.md).
+- **Saved choices:** Settings are shared across characters; marks belong to each character and follow bag movements. Check marks after splitting or merging stacks.
+- **Combat:** Marking, keybinding changes, and sale/mail helpers pause. Settings remain accessible. Existing icons stay visible when readable; new slots may wait until combat ends.
+- **EllesmereUI Bags:** Keep the icon column visible in List view. Combined stacks let you choose which individual stack to mark.
 
 ## Commands
 
@@ -79,8 +84,8 @@ Use the packaged addon ZIP; GitHub's **Download ZIP** contains the source projec
 
 [Browse the code](https://github.com/Landmine-1252/bagmarks), [report a bug or suggest a feature](https://github.com/Landmine-1252/bagmarks/issues), or fork the repository and [open a pull request](https://github.com/Landmine-1252/bagmarks/pulls).
 
-Include your BagMarks version, bag addon, and steps to reproduce any issue.
+Report your bag addon, what you tried, and what happened. Your installed version appears in BagMarks settings.
 
-[MIT licensed](LICENSE). Automated checks pass; in-game verification is still pending.
+[What's new](CHANGELOG.md) · [MIT license](LICENSE)
 
-[What's new](CHANGELOG.md) · [Testing checklist](docs/TESTING.md) · [Compatibility and protection limits](docs/API_COMPATIBILITY.md) · [Build and upload instructions](docs/PACKAGING.md)
+**Installing or updating?** Get the addon ZIP from [GitHub Releases](https://github.com/Landmine-1252/bagmarks/releases), extract its **BagMarks** folder into `Interface/AddOns`, and restart WoW. Replace the old folder to update; settings and marks are kept.

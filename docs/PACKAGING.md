@@ -45,7 +45,7 @@ git tag -a 1.0.1 -m "BagMarks 1.0.1"
 git push origin 1.0.1
 ```
 
-Use a plain `major.minor.patch` tag, such as **`1.0.1`**, without a `v` prefix or prerelease suffix. The tag must match the versions in `BagMarks.toc`, `Core.lua`, and the README, and there must be a nonempty `## 1.0.1` section in `CHANGELOG.md`. The workflow stops if these disagree. It does not change version numbers for you.
+Use a plain `major.minor.patch` tag, such as **`1.0.1`**, without a `v` prefix or prerelease suffix. The tag must match the versions in `BagMarks.toc` and `Core.lua`, and there must be a nonempty `## 1.0.1` section in `CHANGELOG.md`. The workflow stops if these disagree. The README is a player guide and needs no version update. The workflow does not change version numbers for you.
 
 After the checks pass, the workflow creates or completes the version's entry on the repository's **Releases** page and attaches **`BagMarks-1.0.1.zip`**. New release titles use **BagMarks 1.0.1**. New release notes come from that version's changelog section, with documentation links pointing to the same tag. Download the named addon ZIP from the release assets for installation or CurseForge submission; GitHub's automatic source archives contain the repository.
 
@@ -125,4 +125,4 @@ The rejection does not identify which check failed. These packaging changes addr
 
 If the corrected upload is rejected too, keep the existing project and request details from CurseForge support. Include the filename, project/file ID, exact rejection, and selected game version. Their [moderation policy](https://support.curseforge.com/support/solutions/articles/9000197279-moderation-policies) advises against deleting a rejected project or file and starting over.
 
-For future patch releases, increment the final version number, such as `1.0.1` to `1.0.2`. Update `BagMarks.toc`, `Core.lua`, the README, and changelog together before building. Packaging never changes the version automatically.
+For future patch releases, increment the final version number, such as `1.0.1` to `1.0.2`. Update `BagMarks.toc`, `Core.lua`, and changelog together before building. Update the README when usage or settings change. Packaging never changes the version automatically.

@@ -19,7 +19,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.write("BagMarks.toc", "## Interface: 16001\n## Version: 1.0.0\nCore.lua\n")
         self.write("Core.lua", 'A.version = "1.0.0"\n')
-        self.write("README.md", "# BagMarks\n\n**Version 1.0.0**\n")
+        self.write("README.md", "# BagMarks\n\nMark items to keep, sell, or mail.\n")
         self.write("CHANGELOG.md", "# Changelog\n\n## 1.0.0 - Initial release\n\n### Added\n\n- Item marks.\n")
 
     def write(self, name, content):
@@ -47,10 +47,15 @@ class ReleaseMetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Version mismatch"):
             release.read_release(self.root, "1.0.0")
 
-    def test_readme_version_must_match_the_tagged_manifest(self):
-        self.write("README.md", "**Version 0.9.0**\n")
-        with self.assertRaisesRegex(ValueError, "Version mismatch"):
-            release.read_release(self.root, "1.0.0")
+    def test_readme_content_does_not_supply_release_metadata(self):
+        for text in ("# BagMarks\n\nAlt + Right Click an item.\n",
+                     "# BagMarks\n\n**Version 0.9.0**\n",
+                     "# BagMarks\n\nSee the changelog for versions 0.9.0 and 1.0.0.\n"):
+            with self.subTest(text=text):
+                self.write("README.md", text)
+                version, notes = release.read_release(self.root, "1.0.0")
+                self.assertEqual(version, "1.0.0")
+                self.assertEqual(notes, "### Added\n\n- Item marks.\n")
 
     def test_duplicate_or_missing_manifest_version_is_rejected(self):
         for text in ("## Title: BagMarks\n", "## Version: 1.0.0\n## Version: 1.0.0\n", "## Version: 1.0.0-beta\n"):

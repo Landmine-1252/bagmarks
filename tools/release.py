@@ -19,9 +19,10 @@ def one_version(root, filename, pattern):
 def read_release(root, tag=None, repository=None):
     version = one_version(root, "BagMarks.toc", r"^## Version: ([^\r\n]+)$")
     core = one_version(root, "Core.lua", r'^A\.version = "([^"\r\n]+)"[ \t]*$')
-    readme = one_version(root, "README.md", r"\*\*Version ([^*\r\n]+)\*\*")
-    if version != core or version != readme:
-        raise ValueError(f"Version mismatch: TOC {version}, Core.lua {core}, README {readme}")
+    # The player guide is independent of release numbers. Runtime metadata
+    # must still agree with the tag and the matching changelog section.
+    if version != core:
+        raise ValueError(f"Version mismatch: TOC {version}, Core.lua {core}")
     if tag is not None:
         if not re.fullmatch(VERSION, tag):
             raise ValueError("Release tags must be plain versions such as 1.0.0 (no v prefix or suffix)")

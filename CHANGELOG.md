@@ -27,7 +27,7 @@ Initial release for **WoW: Forever 1.60.1**. CurseForge approval is still pendin
 - Update tooltips to explain when a Locked item can still be used.
 - Rebuild the release ZIP with explicit folders and standard file metadata, and validate its contents before replacing the previous build.
 - Update installation and upload instructions. The file to upload is **BagMarks-1.0.0.zip** from the `dist` folder.
-- Add GitHub Actions checks and automatic GitHub releases from matching version tags or a **Run workflow** request on GitHub's website. Each release includes the installable addon ZIP and changelog notes.
+- Run GitHub Actions checks and publish a release when a matching version tag is pushed. Ordinary commits and pull requests do not start the workflow. Manual releases and retries remain available through **Run workflow** on GitHub's website. Each release includes the installable addon ZIP and changelog notes.
 - Fix publishing when a release was already created on GitHub's website. The workflow now adds its missing ZIP, resumes interrupted drafts, and accepts a matching ZIP on repeat runs. Retrying an existing version builds that tag's original addon files, even after the workflow on `main` is updated.
 
 ### Getting started

@@ -22,7 +22,7 @@ The result is **`dist/BagMarks-1.0.0.zip`**. The command runs static checks, the
 
 ## Release from GitHub
 
-[Build and release](../.github/workflows/release.yml) runs tests and builds the addon on branch pushes and pull requests. A version-tag push or a manual release request from the Actions page also publishes a GitHub release with the installable ZIP attached after the checks pass. Ordinary branch and pull-request builds only save a downloadable Actions artifact.
+[Build and release](../.github/workflows/release.yml) runs automatically when a version tag such as `1.0.0` is pushed. It tests and builds the tagged addon, then publishes a GitHub release with the installable ZIP attached after the checks pass. Ordinary commits and pull requests do not start the workflow. The manual **Run workflow** button remains available for releases and retries.
 
 First commit and push the workflow, build scripts, and addon changes to the repository's default branch, `main`. The workflow must be on that branch for GitHub to show its manual run button.
 

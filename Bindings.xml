@@ -1,0 +1,5 @@
+<Bindings>
+    <Binding name="BAGMARKS_TOGGLE_MODE" header="BAGMARKS">
+        BagMarks_ToggleMarkingMode();
+    </Binding>
+</Bindings>

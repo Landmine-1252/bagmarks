@@ -1,0 +1,25 @@
+## Interface: 16001
+## Title: BagMarks
+## Notes: Small, per-item Locked, Junk, and Mail marks for Blizzard bags.
+## Author: BagMarks contributors
+## Version: 1.1.0
+## SavedVariables: BagMarksDB
+## SavedVariablesPerCharacter: BagMarksCharDB
+## IconTexture: Interface\AddOns\BagMarks\Media\BagMarks.tga
+## AddonCompartmentFunc: BagMarks_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: BagMarks_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: BagMarks_OnAddonCompartmentLeave
+
+Core.lua
+API.lua
+Interaction.lua
+Store.lua
+Themes.lua
+UI.lua
+Bags.lua
+Mail.lua
+Operations.lua
+Bindings.lua
+Settings.lua
+Minimap.lua
+Main.lua

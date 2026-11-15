@@ -6,6 +6,7 @@ import re
 import struct
 import subprocess
 import xml.etree.ElementTree as ET
+from release import read_release
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--luac", default="luac5.1")
@@ -19,6 +20,7 @@ assert "## SavedVariables: BagMarksDB" in toc
 assert "## SavedVariablesPerCharacter: BagMarksCharDB" in toc
 addon_version = re.search(r"^## Version: ([0-9.]+)$", toc, re.MULTILINE)[1]
 assert f'A.version = "{addon_version}"' in (root / "Core.lua").read_text()
+read_release(root)  # Include README version and matching changelog in local checks.
 minimap_code = (root / "Minimap.lua").read_text()
 for callback in re.findall(r"^## AddonCompartment\w*: (\w+)$", toc, re.MULTILINE):
     assert f"function {callback}(" in minimap_code, callback

@@ -1,0 +1,120 @@
+name: Build and release
+
+on:
+  push:
+    branches: ['**']
+    tags: ['[0-9]*.[0-9]*.[0-9]*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, for example 1.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bagmarks-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && github.ref_type != 'tag' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Test and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+      commit: ${{ steps.checkout.outputs.commit }}
+    steps:
+      - name: Check out the triggering commit
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends lua5.1
+
+      - name: Validate version and prepare release notes
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_type == 'tag' && github.ref_name || '' }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then test -n "$RELEASE_TAG"; fi
+          python3 tools/release.py \
+            --tag "$RELEASE_TAG" \
+            --repository "$RELEASE_REPOSITORY" \
+            --notes-file dist/release-notes.md \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Run tests and build the installable ZIP
+        run: make package LUA=lua5.1 LUAC=luac5.1
+
+      - name: Save the validated package and release notes
+        id: artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: BagMarks-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            dist/BagMarks-${{ steps.release.outputs.version }}.zip
+            dist/release-notes.md
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+          archive: true
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: bagmarks-publish-${{ needs.build.outputs.version }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out the exact tested commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+
+      - name: Download this build's validated files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          path: dist
+          merge-multiple: true
+          digest-mismatch: error
+
+      - name: Publish the tagged release with its addon ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          test "$RELEASE_TAG" = "$RELEASE_VERSION"
+          test -s "dist/BagMarks-$RELEASE_VERSION.zip"
+          test -s dist/release-notes.md
+          tag_options=()
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then tag_options+=(--create); fi
+          python3 tools/tag_release.py --repository "$GH_REPO" \
+            --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" "${tag_options[@]}"
+          gh release create "$RELEASE_TAG" "dist/BagMarks-$RELEASE_VERSION.zip" \
+            --verify-tag \
+            --title "BagMarks $RELEASE_VERSION" \
+            --notes-file dist/release-notes.md

@@ -8,7 +8,7 @@ Mark what you want to keep, sell, or mail, right in your WoW Forever bags.
 
 Small icons, familiar controls, and no extra inventory window. Supports Blizzard's bags and bank, plus EllesmereUI Bags. No other addons required.
 
-Version 1.0.0 is being prepared for its first public release. CurseForge approval is still pending.
+CurseForge approval is still pending.
 
 ## Install
 
@@ -108,6 +108,8 @@ Keep the icon column visible in List view. If Ellesmere's Alt quick actions capt
 [Browse the code](https://github.com/Landmine-1252/bagmarks), [report a bug or suggest a feature](https://github.com/Landmine-1252/bagmarks/issues), or fork the repository and [open a pull request](https://github.com/Landmine-1252/bagmarks/pulls).
 
 When reporting a problem, include your BagMarks version, bag addon, and steps to reproduce it. Find the installed version in the settings title or by hovering over the minimap button.
+
+Contributors can run `make package` locally. To release from the GitHub website, open **Actions → Build and release → Run workflow** and enter a version such as `1.0.0`. The workflow tests the addon, creates the tag, and publishes the ZIP. Pushing a matching version tag also works. See the [build and upload instructions](docs/PACKAGING.md) for the steps.
 
 BagMarks uses the [MIT License](LICENSE). Automated checks pass; in-game behavior, visuals, and addon compatibility still need verification.
 

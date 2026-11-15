@@ -40,7 +40,7 @@ class ReleaseArchiveTests(unittest.TestCase):
                 relative = path.relative_to(installed / "BagMarks")
                 self.assertEqual(path.read_bytes(), (ROOT / relative).read_bytes())
         self.assertTrue((installed / "BagMarks/BagMarks.toc").is_file())
-        for excluded in (".git", "tools", "tests", "dist", "Makefile"):
+        for excluded in (".git", ".github", "tools", "tests", "dist", "Makefile"):
             self.assertFalse((installed / "BagMarks" / excluded).exists())
 
     def test_build_is_reproducible(self):

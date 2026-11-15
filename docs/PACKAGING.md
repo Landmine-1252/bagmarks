@@ -68,9 +68,32 @@ Start a new manual run after a workflow fix. GitHub's **Re-run failed jobs** but
 
 For later retries, the workflow attaches a missing ZIP, verifies an existing ZIP, or completes an interrupted draft. An [immutable published release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) can only be verified; GitHub does not allow adding a missing asset to it. The workflow reports that case without changing the release. The corrected publication path has offline regression coverage and still needs a successful hosted run.
 
-This automates GitHub releases. CurseForge submission remains the separate upload step below. GitHub's [tag-trigger documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push), [release command reference](https://cli.github.com/manual/gh_release_create), and [asset upload reference](https://cli.github.com/manual/gh_release_upload) describe the trigger and publication behavior used here.
+This workflow publishes to GitHub. Configure automatic CurseForge packaging below to also create CurseForge files from new tags, or upload the tested ZIP manually. GitHub's [tag-trigger documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push), [release command reference](https://cli.github.com/manual/gh_release_create), and [asset upload reference](https://cli.github.com/manual/gh_release_upload) describe the GitHub publication behavior used here.
 
-## Upload to CurseForge
+## Automatic CurseForge packaging
+
+The repository URL `https://github.com/Landmine-1252/bagmarks` is correct. CurseForge also needs a GitHub webhook to receive tag notifications. Follow its [automatic packaging guide](https://support.curseforge.com/support/solutions/articles/9000197281-automatic-packaging):
+
+1. In the CurseForge project's repository settings, enable packaging for **tagged commits only**. Leave packaging of all commits disabled to avoid alpha files from ordinary commits.
+2. Copy the numeric **Project ID** from the project's Overview page, under **About This Project**.
+3. Create a token on your [CurseForge API tokens page](https://www.curseforge.com/account/api-tokens), with a name such as `BagMarks packaging`.
+4. Open [BagMarks on GitHub](https://github.com/Landmine-1252/bagmarks), then **Settings → Webhooks → Add webhook**. Use the following **Payload URL**, replacing both placeholders with your project ID and token:
+
+   ```text
+   https://www.curseforge.com/api/projects/PROJECT_ID/package?token=YOUR_CURSEFORGE_TOKEN
+   ```
+
+5. Keep **Just the push event** selected and **Active** checked. Leave the remaining settings at their defaults, as CurseForge instructs, and save the webhook. Enter the token directly in these private webhook settings; do not commit it to the repository.
+
+The repository's [.pkgmeta](../.pkgmeta) tells CurseForge to use the `BagMarks` folder, include the Markdown changelog, and omit tests, build tools, original artwork sources, and `dist`. Runtime icons, the license, and documentation remain included. CurseForge receives the full committed `CHANGELOG.md`, with the newest entry first. See the [PackageMeta reference](https://support.curseforge.com/support/solutions/articles/9000197952-preparing-the-packagemeta-file).
+
+Commit and push `.pkgmeta` before creating the next version tag. In GitHub's **Releases → Draft a new release** form, choose a **new** tag matching the committed addon version and target the commit containing those changes. Publishing that release creates the tag. An existing tag keeps its original files, so it will not pick up a newly added `.pkgmeta`. Use the next version if the current one has already been released.
+
+Check **Settings → Webhooks → your CurseForge webhook → Recent deliveries** for a successful tag push with a `refs/tags/` reference. GitHub exposes the request and response in its [delivery details](https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/viewing-webhook-deliveries). Then check CurseForge for the generated file and its processing status. A successful webhook delivery does not itself confirm a successful build or approval.
+
+CurseForge builds directly from the tagged source. It does not upload `dist/BagMarks-1.0.1.zip`, run our build script, or wait for GitHub Actions tests. Run `make package` before tagging. The GitHub release workflow continues independently. CurseForge's game-version checks and approval still apply; confirm that the project supports **Forever 1.60.1 / Interface 16001** if packaging fails.
+
+## Manual upload to CurseForge
 
 1. Open the existing BagMarks project for World of Warcraft.
 2. Upload **`dist/BagMarks-1.0.1.zip`**, or the identically named addon asset from a successful GitHub release. Do not upload GitHub's source ZIP or the outer Actions artifact ZIP.

@@ -1,0 +1,15 @@
+package-as: BagMarks
+enable-nolib-creation: no
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+# Dotfiles and directories, including .github, are ignored automatically.
+# Keep the shipped source files aligned with tools/package.py.
+ignore:
+  - art
+  - dist
+  - tests
+  - tools
+  - Makefile

@@ -12,8 +12,11 @@ function API:Location(bag, slot)
     return ItemLocation:CreateFromBagAndSlot(bag, slot)
 end
 
-function API:Read(bag, slot)
-    if not self.available or A.InCombat() or type(bag) ~= "number" or type(slot) ~= "number" then return end
+function API:Read(bag, slot, forDisplay)
+    -- Passive icons may read a live identity in combat. Operation reads and
+    -- scans stay suspended; unreadable data never falls back to a cached mark.
+    if not self.available or (A.InCombat() and not forDisplay) or not A.Safe(bag) or not A.Safe(slot)
+        or type(bag) ~= "number" or type(slot) ~= "number" then return end
     local ok, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
     if not ok or not A.Safe(info) or type(info) ~= "table" then return end
     for _, key in ipairs({ "itemID", "stackCount", "isLocked", "isBound", "hasNoValue", "hyperlink", "quality" }) do

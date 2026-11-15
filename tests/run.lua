@@ -243,9 +243,9 @@ test("Ellesmere honors custom mouse gestures, cycling, mode and cursor drops", f
     A.SetOption("markingAction", "cycle")
     M.alt, M.shift = true, true; A.Bags:Refresh()
     assert(contains(overlay.passthrough, "RightButton")); eq(contains(overlay.passthrough, "Button4"), false)
-    overlay:Fire("OnClick", "Button4"); eq(A.Store:Get("Item-A"), "junk")
+    overlay:Fire("OnClick", "Button4"); eq(A.Store:Get("Item-A"), "locked")
     M.alt, M.shift = false, false; A.ToggleMode()
-    overlay:Fire("OnClick", "Button4"); eq(A.Store:Get("Item-A"), "mail")
+    overlay:Fire("OnClick", "Button4"); eq(A.Store:Get("Item-A"), "junk")
     A.ToggleMode(); assert(contains(overlay.passthrough, "Button4"))
     eq(A.Store:Get("Item-B"), nil)
     M.alt, M.shift = true, true
@@ -665,15 +665,20 @@ test("Marking Mode only leaves shortcuts alone until enabled", function()
     eq(contains(A.Bags.overlays[button].passthrough, "MiddleButton"), true)
 end)
 
-test("cycling rotates the selected instance through all marks without opening a menu", function()
-    M.item("Item-A", 0, 1); M.item("Item-B", 0, 2)
+test("cycling locks first and rotates the selected instance through all marks", function()
+    local item = M.item("Item-A", 0, 1)
+    M.item("Item-B", 0, 2)
     local button = M.button(0, 1)
     A.SetOption("mouseButton", "Button4"); A.SetOption("markingAction", "cycle")
     M.alt = true; A.Bags:Refresh(); local overlay = A.Bags.overlays[button]
     M.menu = nil
-    for _, state in ipairs({ "junk", "mail", "locked", false }) do
+    for _, state in ipairs({ "locked", "junk", "mail", false }) do
         overlay:Fire("OnClick", "Button4")
         eq(A.Store:Get("Item-A"), state or nil); eq(A.Store:Get("Item-B"), nil)
+        eq(not not item.held, state == "locked", "native hold must follow the selected mark")
+        local junk = A.Operations:CollectJunk()
+        eq(#junk, state == "junk" and 1 or 0, "only the explicit Junk step can enter a sale")
+        if state == "junk" then eq(junk[1].guid, "Item-A") end
     end
     eq(M.menu, nil); eq(overlay.icon:IsShown(), false)
 end)
@@ -696,7 +701,7 @@ test("custom marking buttons do not remove the Locked item guards", function()
     eq(contains(overlay.passthrough, "RightButton"), false)
     eq(contains(overlay.passthrough, "LeftButton"), false)
     overlay:Fire("OnClick", "RightButton"); eq(A.Store:Get("Item-A"), "locked")
-    overlay:Fire("OnClick", "MiddleButton"); eq(A.Store:Get("Item-A"), nil)
+    overlay:Fire("OnClick", "MiddleButton"); eq(A.Store:Get("Item-A"), "junk")
 end)
 
 test("marking does not consume the selected drop click when the cursor holds an item", function()
@@ -866,5 +871,6 @@ end)
 dofile("tests/protection.lua")(M, A, test, eq, mark)
 dofile("tests/reusable.lua")(M, A, test, eq, mark)
 dofile("tests/autosell.lua")(M, A, test, eq, mark)
+dofile("tests/combat_icons.lua")(M, A, test, eq, mark)
 
 print(string.format("%d mocked tests passed under %s. No in-game or taint testing was performed.", passed, _VERSION))

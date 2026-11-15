@@ -13,10 +13,10 @@ function Bags:Coordinates(button)
     end
 end
 
-function Bags:Read(button)
-    if A.Ellesmere and A.Ellesmere.slots[button] then return A.Ellesmere:Read(button) end
+function Bags:Read(button, forDisplay)
+    if A.Ellesmere and A.Ellesmere.slots[button] then return A.Ellesmere:Read(button, forDisplay) end
     local bag, slot = self:Coordinates(button)
-    return A.API:Read(bag, slot)
+    return A.API:Read(bag, slot, forDisplay)
 end
 
 function Bags:RiskyContext()
@@ -48,15 +48,22 @@ function Bags:Layout(button, overlay)
     overlay:SetAllPoints(button)
     overlay:SetFrameStrata(button:GetFrameStrata())
     overlay:SetFrameLevel(math.max(button:GetFrameLevel(), host:GetFrameLevel()) + 5)
+    local iconHost = shown and host or button
+    if overlay.icon:GetParent() ~= iconHost then overlay.icon:SetParent(iconHost) end
+    overlay.icon:SetScale(button:GetEffectiveScale() / iconHost:GetEffectiveScale())
     overlay.icon:ClearAllPoints()
     local iconSize = shown and host:GetWidth() < 28 and 12 or 14
     overlay.icon:SetSize(iconSize, iconSize)
-    overlay.icon:SetPoint("TOPRIGHT", shown and host or overlay, "TOPRIGHT", -3, -3)
+    overlay.icon:SetPoint("TOPRIGHT", iconHost, "TOPRIGHT", -3, -3)
 end
 
 function Bags:Attach(button, force)
-    if not button or A.InCombat() or (button.IsForbidden and button:IsForbidden()) then return end
+    if not button or (button.IsForbidden and button:IsForbidden()) then return end
     local overlay = self.overlays[button]
+    if A.InCombat() then
+        if overlay then self:Update(button) end
+        return -- New textures, scripts, and layout wait until combat ends.
+    end
     if not overlay then
         -- Independent, insecure frames. Never replace Blizzard scripts or secure functions.
         overlay = CreateFrame("Button", nil, UIParent)
@@ -68,10 +75,14 @@ function Bags:Attach(button, force)
         overlay:EnableMouse(true)
         overlay:SetMouseMotionEnabled(false) -- Blizzard retains hover/highlight/tooltips.
         overlay:RegisterForClicks("AnyUp")
-        overlay.icon = overlay:CreateTexture(nil, "OVERLAY")
+        -- The passive texture belongs to the item icon host, independently of
+        -- this input button. Hiding click capture must not hide the mark.
+        local shown = A.Ellesmere and A.Ellesmere.slots[button]
+        local iconHost = shown and shown.host or button
+        overlay.icon = iconHost:CreateTexture(nil, "OVERLAY", nil, 7)
         overlay:SetScript("OnClick", function(self, mouse) Bags:Click(self, mouse) end)
         -- Ancestor hide/show dispatches these as well. Pooled buttons are refreshed on reuse.
-        button:HookScript("OnHide", function() overlay.seenVisible = false; overlay:Hide() end)
+        button:HookScript("OnHide", function() overlay.seenVisible = false; overlay:Hide(); overlay.icon:Hide() end)
         button:HookScript("OnShow", function() Bags:Update(button) end)
         self.overlays[button] = overlay
         force = true
@@ -83,18 +94,27 @@ end
 function Bags:Update(button)
     local overlay = self.overlays[button]
     if not overlay then return end
-    if not A.CanAct() or not button:IsVisible() then overlay:Hide(); return end
-    self:Layout(button, overlay)
+    if not A.IsEnabled() or not button:IsVisible() then overlay:Hide(); overlay.icon:Hide(); return end
+    local inCombat = A.InCombat()
+    local shown = A.Ellesmere and A.Ellesmere.slots[button]
+    if inCombat then
+        overlay:Hide()
+        -- A renderer can replace its icon host mid-combat. Hide the old texture
+        -- until it can be reparented safely, rather than drawing on a stale row.
+        if overlay.icon:GetParent() ~= (shown and shown.host or button) then overlay.icon:Hide(); return end
+    else
+        self:Layout(button, overlay)
+    end
     local bag, slot = self:Coordinates(button)
     overlay.bag, overlay.slot, overlay.seenVisible = bag, slot, true
-    local item = self:Read(button)
-    local shown = A.Ellesmere and A.Ellesmere.slots[button]
+    local item = self:Read(button, inCombat)
     if shown and not item then overlay.icon:Hide(); overlay:Hide(); return end
     local state = item and A.Store:Get(item.guid)
     local hasLocked = state == "locked"
     if shown and shown.total then state, hasLocked = A.Ellesmere:GroupState(button, item) end
     overlay.icon:SetShown(state ~= nil and A.db.overlays)
     if state then A.PaintIcon(overlay.icon, state) end
+    if inCombat then return end -- No marking, click guards, or mouse changes.
     local marking = A.Interaction:Active()
     local guard = hasLocked and self:RiskyContext()
     local modifiedLeft = (IsShiftKeyDown() or IsControlKeyDown()) and not (SpellIsTargeting and SpellIsTargeting())

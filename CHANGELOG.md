@@ -1,8 +1,28 @@
 # BagMarks Changelog
 
+## 1.0.1 - Combat icons and safer marking
+
+### Fixed
+
+- Keep existing Locked, Junk, and Mail icons visible during combat in Blizzard and Ellesmere bags when the item can be identified. Marking clicks and sale/mail helpers still pause.
+- Clear uncertain icons when slots are reused or combined stacks change, so an old mark is not shown on another item.
+- Finish existing GitHub releases by attaching a missing addon ZIP, and verify matching ZIPs on repeat runs without replacing them.
+
+### Changed
+
+- Put Locked first when cycling marks: **Normal → Locked → Junk → Mail → Normal**, matching the marking menu. The first click on an unmarked item now locks it.
+- Shorten the README and put default controls near the top.
+- Run release builds on version tags or manual requests. Ordinary commits and pull requests no longer start the workflow.
+
+### Notes
+
+- Saved preferences and item marks are preserved.
+- New slots and changed icon hosts wait until combat ends. Unreadable items and uncertain combined stacks may have their icons hidden.
+- **185 Lua 5.1 mock tests**, **67 Python tests**, and static checks passed. In-game rendering and taint verification remain pending. See the [testing checklist](docs/TESTING.md) and [protection limits](docs/API_COMPATIBILITY.md).
+
 ## 1.0.0 - Initial release
 
-Initial release for **WoW: Forever 1.60.1**. CurseForge approval is still pending. All fixes below are included in version 1.0.0.
+Initial release for **WoW: Forever 1.60.1**.
 
 ### Added
 
@@ -27,8 +47,7 @@ Initial release for **WoW: Forever 1.60.1**. CurseForge approval is still pendin
 - Update tooltips to explain when a Locked item can still be used.
 - Rebuild the release ZIP with explicit folders and standard file metadata, and validate its contents before replacing the previous build.
 - Update installation and upload instructions. The file to upload is **BagMarks-1.0.0.zip** from the `dist` folder.
-- Run GitHub Actions checks and publish a release when a matching version tag is pushed. Ordinary commits and pull requests do not start the workflow. Manual releases and retries remain available through **Run workflow** on GitHub's website. Each release includes the installable addon ZIP and changelog notes.
-- Fix publishing when a release was already created on GitHub's website. The workflow now adds its missing ZIP, resumes interrupted drafts, and accepts a matching ZIP on repeat runs. Retrying an existing version builds that tag's original addon files, even after the workflow on `main` is updated.
+- Add GitHub Actions checks and automatic GitHub releases from matching version tags or a **Run workflow** request on GitHub's website. Each release includes the installable addon ZIP and changelog notes.
 
 ### Getting started
 
@@ -40,7 +59,7 @@ Initial release for **WoW: Forever 1.60.1**. CurseForge approval is still pendin
 
 - Some game actions and other addons can bypass Locked-item protection. See the [protection limits](docs/API_COMPATIBILITY.md).
 - Keep the icon column visible when using Ellesmere's List view.
-- **175 Lua 5.1 mock tests**, **67 Python archive and release tests**, and static checks have passed. In-game behavior, the sleeping bag's item data, visuals, and taint verification remain pending. See the [testing checklist](docs/TESTING.md).
+- **175 Lua 5.1 mock tests**, **36 Python archive and release tests**, and static checks passed for this release. In-game behavior, the sleeping bag's item data, visuals, and taint verification were pending. See the [testing checklist](docs/TESTING.md).
 - Local archive validation cannot confirm CurseForge acceptance. The corrected package still needs to pass its upload checks.
 
 Licensed under the [MIT License](LICENSE). Earlier build notes are preserved in the [development history](docs/DEVELOPMENT_HISTORY.md).

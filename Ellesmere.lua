@@ -27,18 +27,21 @@ function Ellesmere:Paint(button, data)
         end
     end
     self.slots[button] = shown
-    if A.InCombat() then return end -- Discovery attaches pending slots after combat.
+    if A.InCombat() then
+        if A.Bags.overlays[button] then A.Bags:Update(button) end
+        return -- Discovery attaches newly created slots after combat.
+    end
     if shown.itemID then A.Bags:Attach(button, true)
     elseif A.Bags.overlays[button] then A.Bags:Update(button) end
 end
 
-function Ellesmere:Read(button)
+function Ellesmere:Read(button, forDisplay)
     local shown = self.slots[button]
     if not shown or not shown.itemID or (not carried(shown.bag) and not A.bankOpen) then return end
     -- A recycled button may have been reassigned before its next painter call.
     if button.GetBagID and button:GetBagID() ~= shown.bag then return end
     if button.GetID and button:GetID() ~= shown.slot then return end
-    local item = A.API:Read(shown.bag, shown.slot)
+    local item = A.API:Read(shown.bag, shown.slot, forDisplay)
     if item and item.itemID == shown.itemID and (not shown.link or item.link == shown.link) then return item end
 end
 
@@ -66,6 +69,14 @@ function Ellesmere:GroupState(button, item)
     local state, same, total = nil, true, 0
     local hasLocked = item and A.Store:Get(item.guid) == "locked" or false
     for i, candidate in ipairs(items) do
+        if A.InCombat() then
+            -- The inventory snapshot is frozen during combat. Keep a group
+            -- icon only while every cached member still has its exact live
+            -- identity and count; changed groups wait for reconciliation.
+            local current = A.API:Read(candidate.bag, candidate.slot, true)
+            if not current or current.guid ~= candidate.guid or current.count ~= candidate.count
+                or current.link ~= candidate.link then same = false end
+        end
         local mark = A.Store:Get(candidate.guid)
         if i == 1 then state = mark elseif state ~= mark then same = false end
         if mark == "locked" then hasLocked = true end

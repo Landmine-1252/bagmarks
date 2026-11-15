@@ -48,6 +48,7 @@ function Interaction:Mark(owner, item)
         A.UI:ItemMenu(owner, item)
         return
     end
-    local nextState = { normal = "junk", junk = "mail", mail = "locked", locked = false }
+    -- Match the menu order: the first marking click protects an unmarked item.
+    local nextState = { normal = "locked", locked = "junk", junk = "mail", mail = false }
     A.Store:Set(item, nextState[A.Store:Get(item.guid) or "normal"] or nil)
 end

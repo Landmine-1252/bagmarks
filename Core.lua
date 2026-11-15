@@ -1,6 +1,6 @@
 local addonName, A = ...
 A.name = addonName
-A.version = "1.0.0"
+A.version = "1.0.1"
 A.schema = 2
 A.states = { locked = "Locked", junk = "Junk", mail = "Mail" }
 A.defaults = {

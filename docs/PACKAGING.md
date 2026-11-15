@@ -34,9 +34,9 @@ To release entirely through the GitHub website:
 4. Enter **`1.0.0`** in the version field.
 5. Click **Run workflow** to start the checks and release build.
 
-This uses GitHub's [manual workflow form](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow). After a successful build, the workflow creates the version tag at the exact commit it tested, then uploads the ZIP and publishes the release. An existing tag must already point to that commit; the workflow never moves tags. Failed checks create neither a tag nor a release.
+This uses GitHub's [manual workflow form](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow). For a new version, the workflow tests the selected branch's commit, creates its version tag, uploads the ZIP, and publishes the release. If that tag already exists, the workflow builds the tagged addon files using the updated release workflow from the selected branch. This lets you repair publishing after `main` has advanced, while keeping the release tied to its original source. The workflow never moves tags. Failed checks create neither a tag nor a release.
 
-Use this Actions form for the automated release. GitHub's separate **Releases → Draft a new release** form creates a release itself, which conflicts with this workflow's release-creation step. The Actions form lets the ZIP finish building before the release is published.
+The Actions form can handle the whole release. If you already used GitHub's **Releases → Draft a new release** form, run this workflow for the same version to attach its addon ZIP. Existing titles and notes are preserved. An interrupted draft is published after its ZIP is verified.
 
 You can also keep using terminal tags. From the committed version you want to release:
 
@@ -47,13 +47,26 @@ git push origin 1.0.0
 
 Use a plain `major.minor.patch` tag, such as **`1.0.0`**, without a `v` prefix or prerelease suffix. The tag must match the versions in `BagMarks.toc`, `Core.lua`, and the README, and there must be a nonempty `## 1.0.0` section in `CHANGELOG.md`. The workflow stops if these disagree. It does not change version numbers for you.
 
-After the checks pass, the workflow creates **BagMarks 1.0.0** in the repository's **Releases** page and attaches **`BagMarks-1.0.0.zip`**. Release notes come from that version's changelog section, with documentation links pointing to the same tag. Download the named addon ZIP from the release assets for installation or CurseForge submission; GitHub's automatic source archives contain the repository.
+After the checks pass, the workflow creates or completes the version's entry on the repository's **Releases** page and attaches **`BagMarks-1.0.0.zip`**. New release titles use **BagMarks 1.0.0**. New release notes come from that version's changelog section, with documentation links pointing to the same tag. Download the named addon ZIP from the release assets for installation or CurseForge submission; GitHub's automatic source archives contain the repository.
 
 Follow the run in the repository's **Actions** tab. Builds run with read access, and only the publishing job receives `contents: write`. The workflow uses GitHub's automatic token, so no personal access token or new repository secret is needed. GitHub Actions must be enabled, and any organization policy must allow the publishing job's permission. The official checkout and artifact actions are pinned to verified commit hashes.
 
-Only a pushed version tag or an explicit manual release request can publish. The publishing job uses the exact artifact produced by its successful build and verifies the tag's commit. Only the manual path may create a missing tag; the push path refuses to recreate a tag removed during the build. Publishing is serialized per version, and existing GitHub releases are not replaced. If an upload fails after tagging or leaves a draft, inspect that tag, draft and the Actions log before retrying. Hosted event delivery and repository permissions still need verification on the first real GitHub run.
+Only a pushed version tag or an explicit manual release request can publish. The publishing job uses the exact artifact produced by its successful build and verifies the tag's commit. The release tools are tested from the workflow's own commit before an existing tag is checked out. Only the manual path may create a missing tag; the push path refuses to recreate a tag removed during the build. Publishing is serialized per version. Existing ZIPs are checked by size and SHA-256, downloading the asset if GitHub has no digest. Matching assets need no upload; different or incomplete assets stop publishing for review. No asset is automatically deleted or replaced.
 
-This automates GitHub releases. CurseForge submission remains the separate upload step below. GitHub's [tag-trigger documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push) and [release command reference](https://cli.github.com/manual/gh_release_create) describe the trigger and publication behavior used here.
+### Retry the failed 1.0.0 release
+
+The November 15 run built and downloaded the addon successfully, then failed with **“a release with the same tag name already exists: 1.0.0.”** The existing release can be completed without deleting it or moving its tag.
+
+1. Commit and push the updated workflow and release tools to **main**.
+2. Open **Actions → Build and release → Run workflow**.
+3. Choose **main**, enter **`1.0.0`**, and start a new run.
+4. Once it succeeds, open the existing **1.0.0** release and download **`BagMarks-1.0.0.zip`**.
+
+Start a new manual run after a workflow fix. GitHub's **Re-run failed jobs** button uses the original run's workflow and commit, so it would repeat the old publishing error. See GitHub's [rerun behavior](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
+
+For later retries, the workflow attaches a missing ZIP, verifies an existing ZIP, or completes an interrupted draft. An [immutable published release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) can only be verified; GitHub does not allow adding a missing asset to it. The workflow reports that case without changing the release. The corrected publication path has offline regression coverage and still needs a successful hosted run.
+
+This automates GitHub releases. CurseForge submission remains the separate upload step below. GitHub's [tag-trigger documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push), [release command reference](https://cli.github.com/manual/gh_release_create), and [asset upload reference](https://cli.github.com/manual/gh_release_upload) describe the trigger and publication behavior used here.
 
 ## Upload to CurseForge
 

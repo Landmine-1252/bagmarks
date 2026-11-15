@@ -109,7 +109,7 @@ Keep the icon column visible in List view. If Ellesmere's Alt quick actions capt
 
 When reporting a problem, include your BagMarks version, bag addon, and steps to reproduce it. Find the installed version in the settings title or by hovering over the minimap button.
 
-Contributors can run `make package` locally. To release from the GitHub website, open **Actions → Build and release → Run workflow** and enter a version such as `1.0.0`. The workflow tests the addon, creates the tag, and publishes the ZIP. Pushing a matching version tag also works. See the [build and upload instructions](docs/PACKAGING.md) for the steps.
+Contributors can run `make package` locally. To release from the GitHub website, open **Actions → Build and release → Run workflow** and enter a version such as `1.0.0`. The workflow tests the addon and publishes its ZIP, creating the tag when needed. If the release already exists, it adds the missing ZIP from that tag. Pushing a matching version tag also works. See the [build and upload instructions](docs/PACKAGING.md) for the steps and how to retry a failed release.
 
 BagMarks uses the [MIT License](LICENSE). Automated checks pass; in-game behavior, visuals, and addon compatibility still need verification.
 

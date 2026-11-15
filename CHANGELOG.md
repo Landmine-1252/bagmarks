@@ -28,6 +28,7 @@ Initial release for **WoW: Forever 1.60.1**. CurseForge approval is still pendin
 - Rebuild the release ZIP with explicit folders and standard file metadata, and validate its contents before replacing the previous build.
 - Update installation and upload instructions. The file to upload is **BagMarks-1.0.0.zip** from the `dist` folder.
 - Add GitHub Actions checks and automatic GitHub releases from matching version tags or a **Run workflow** request on GitHub's website. Each release includes the installable addon ZIP and changelog notes.
+- Fix publishing when a release was already created on GitHub's website. The workflow now adds its missing ZIP, resumes interrupted drafts, and accepts a matching ZIP on repeat runs. Retrying an existing version builds that tag's original addon files, even after the workflow on `main` is updated.
 
 ### Getting started
 
@@ -39,7 +40,7 @@ Initial release for **WoW: Forever 1.60.1**. CurseForge approval is still pendin
 
 - Some game actions and other addons can bypass Locked-item protection. See the [protection limits](docs/API_COMPATIBILITY.md).
 - Keep the icon column visible when using Ellesmere's List view.
-- **175 Lua 5.1 mock tests**, **36 Python archive and release tests**, and static checks have passed. In-game behavior, the sleeping bag's item data, visuals, and taint verification remain pending. See the [testing checklist](docs/TESTING.md).
+- **175 Lua 5.1 mock tests**, **67 Python archive and release tests**, and static checks have passed. In-game behavior, the sleeping bag's item data, visuals, and taint verification remain pending. See the [testing checklist](docs/TESTING.md).
 - Local archive validation cannot confirm CurseForge acceptance. The corrected package still needs to pass its upload checks.
 
 Licensed under the [MIT License](LICENSE). Earlier build notes are preserved in the [development history](docs/DEVELOPMENT_HISTORY.md).

@@ -31,12 +31,38 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
       artifact-id: ${{ steps.artifact.outputs.artifact-id }}
-      commit: ${{ steps.checkout.outputs.commit }}
+      # A release retry can build an older tag using this workflow's newer tools.
+      commit: ${{ steps.source.outputs.commit || steps.checkout.outputs.commit }}
+      publisher-commit: ${{ steps.checkout.outputs.commit }}
     steps:
       - name: Check out the triggering commit
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+
+      - name: Test the release tools used by this workflow
+        if: github.event_name == 'workflow_dispatch'
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+      - name: Select the existing tag or the chosen branch commit
+        id: source
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.version }}
+          SELECTED_COMMIT: ${{ steps.checkout.outputs.commit }}
+        run: |
+          python3 tools/tag_release.py --resolve \
+            --repository "$RELEASE_REPOSITORY" --tag "$RELEASE_TAG" \
+            --commit "$SELECTED_COMMIT" --github-output "$GITHUB_OUTPUT"
+
+      - name: Check out the selected addon source
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.commit }}
           persist-credentials: false
 
       - name: Install Lua 5.1
@@ -85,10 +111,10 @@ jobs:
       group: bagmarks-publish-${{ needs.build.outputs.version }}
       cancel-in-progress: false
     steps:
-      - name: Check out the exact tested commit
+      - name: Check out the tested release tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.build.outputs.commit }}
+          ref: ${{ needs.build.outputs.publisher-commit }}
           persist-credentials: false
 
       - name: Download this build's validated files
@@ -111,10 +137,8 @@ jobs:
           test -s "dist/BagMarks-$RELEASE_VERSION.zip"
           test -s dist/release-notes.md
           tag_options=()
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then tag_options+=(--create); fi
-          python3 tools/tag_release.py --repository "$GH_REPO" \
-            --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" "${tag_options[@]}"
-          gh release create "$RELEASE_TAG" "dist/BagMarks-$RELEASE_VERSION.zip" \
-            --verify-tag \
-            --title "BagMarks $RELEASE_VERSION" \
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then tag_options+=(--create-tag); fi
+          python3 tools/publish_release.py --repository "$GH_REPO" \
+            --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" "${tag_options[@]}" \
+            --archive "dist/BagMarks-$RELEASE_VERSION.zip" \
             --notes-file dist/release-notes.md

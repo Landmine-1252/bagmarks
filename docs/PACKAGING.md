@@ -1,6 +1,6 @@
 # Building and uploading BagMarks
 
-The current build is **1.0.4**, with a cursor-protection fix for sorting Locked reusable items, verified native releases, and more detailed copyable diagnostics. Small corner remains the default. Existing saved shortcuts, preferences, and item marks are preserved. Install the ZIP locally and complete the in-game checks before committing and tagging.
+The current build is **1.0.4**, with normal use and equipping of Locked items, a cursor-protection fix for sorting, verified native releases, and more detailed copyable diagnostics. Small corner remains the default. Existing saved shortcuts, preferences, and item marks are preserved. Install the ZIP locally and complete the in-game checks before committing and tagging.
 
 ## Build the upload file
 

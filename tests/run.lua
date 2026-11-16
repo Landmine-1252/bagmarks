@@ -699,7 +699,7 @@ test("cycling locks first and rotates the selected instance through all marks", 
     for _, state in ipairs({ "locked", "junk", "mail", false }) do
         overlay:Fire("OnClick", "Button4")
         eq(A.Store:Get("Item-A"), state or nil); eq(A.Store:Get("Item-B"), nil)
-        eq(not not item.held, state == "locked", "native hold must follow the selected mark")
+        eq(item.held, nil, "mark cycling must not freeze normal item use")
         local junk = A.Operations:CollectJunk()
         eq(#junk, state == "junk" and 1 or 0, "only the explicit Junk step can enter a sale")
         if state == "junk" then eq(junk[1].guid, "Item-A") end
@@ -894,6 +894,7 @@ test("standard AddOns menu callbacks operate even when the minimap button is hid
     eq(A.Minimap.button:IsShown(), false)
 end)
 
+dofile("tests/usable_locked.lua")(M, A, test, eq, mark)
 dofile("tests/protection.lua")(M, A, test, eq, mark)
 dofile("tests/hold_release.lua")(M, A, test, eq, mark)
 dofile("tests/sort_cursor.lua")(M, A, test, eq, mark)

@@ -102,11 +102,10 @@ function Diagnostics:Report(itemID)
         elseif A.mailOpen and mailbox == false then reason = "Stale mailbox flag is blocking reusable use."
         elseif risk ~= false then reason = "Transfer or item-targeting protection is active or unreadable."
         elseif not matches then reason = "The GUID lookup cannot confirm this item."
-        elseif lookupReusable ~= true then reason = "No verified reusable use effect; the strict hold applies."
-        elseif owned then reason = "Reusable item has an owned hold awaiting reconciliation."
+        elseif owned then reason = "Item has an owned hold awaiting reconciliation."
         elseif nativeHeld == true or item.busy then reason = "Client reports the item busy; BagMarks has no owned hold."
         elseif nativeHeld ~= false then reason = "Client hold status is unavailable."
-        else reason = "Ordinary reusable use is allowed by protection." end
+        else reason = "Ordinary use, equipping, and inventory movement are allowed by protection." end
         lines[#lines + 1] = "Item " .. item.itemID .. "; bag=" .. item.bag .. "; slot=" .. item.slot
             .. "; mark=" .. (A.states[state] or "Normal") .. "; review=" .. value(A.char.review[item.guid] == true)
         lines[#lines + 1] = "  " .. reason

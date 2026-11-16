@@ -4,7 +4,7 @@
 local _, A = ...
 local Protection = { held = {} }
 A.Protection = Protection
-A.protectionRevision = "cursor-settle-2" -- Identifies protection behavior in support reports.
+A.protectionRevision = "use-and-equip-3" -- Identifies protection behavior in support reports.
 
 local function guid(value)
     if A.Safe(value) and type(value) == "string" and value:match("^Item%-") then return value end
@@ -54,6 +54,10 @@ end
 
 function Protection:ReturnCursor(requested, deleting)
     if self.returning or not A.IsEnabled() then return false end
+    -- Ordinary pickup is also how players drag gear onto their character. Only
+    -- return it during a transfer/targeting context or a deletion confirmation.
+    -- A Locked mark protects against loss; it must not prevent equipping/use.
+    if not deleting and not self:RiskyContext() then return false end
     requested = guid(requested)
     local current = self:CursorGUID()
     -- A deletion event can refer to an older cursor item. Never clear a different
@@ -80,7 +84,7 @@ function Protection:ReturnCursor(requested, deleting)
     if deleting and InputUtil and read(InputUtil.IsGamepadUIEnabled) == true then
         A.Print("Locked item returned. Cancel any remaining gamepad deletion confirmation.")
     else
-        A.Print("Locked item protected. Clear its BagMarks mark before moving or transferring it.")
+        A.Print("Locked item protected. Clear its BagMarks mark before selling, mailing, trading, or deleting it.")
     end
     return true
 end
@@ -146,14 +150,14 @@ function Protection:Release(guidToRelease)
 end
 
 function Protection:RiskyContext()
-    if A.merchantOpen or A.mailOpen or A.tradeOpen or A.bankOpen or A.auctionOpen then return true end
+    if A.merchantOpen or A.mailOpen or A.tradeOpen or A.auctionOpen then return true end
     -- Match the native container's two item-target paths. Ground targeting from
-    -- a reusable item's own spell must not hold that item mid-use. Unknown
-    -- targeting data stays conservative, including on older client revisions.
+    -- an item's own spell must not hold that item mid-use. Missing optional
+    -- targeting APIs must not turn every normal use/equip into a permanent hold.
     local itemTarget, idTarget = read(SpellCanTargetItem), read(SpellCanTargetItemID)
     if itemTarget == true or idTarget == true then return true end
     if itemTarget == false and idTarget == false then return false end
-    return read(SpellIsTargeting) ~= false
+    return read(SpellIsTargeting) == true
 end
 
 function Protection:SyncHolds()
@@ -162,25 +166,21 @@ function Protection:SyncHolds()
     if self.syncing or self.releasing then return end
     self.syncing = true
     local enabled = A.IsEnabled() and not self.stopping
+    local risk = enabled and self:RiskyContext()
     self.holdsAvailable = C_Item and type(C_Item.GetItemLocation) == "function"
         and type(C_Item.DoesItemExist) == "function" and type(C_Item.IsLocked) == "function"
         and type(C_Item.LockItem) == "function" and type(C_Item.UnlockItemByGUID) == "function" or false
     for heldGUID in pairs(self.held) do
-        if not enabled or A.Store:Get(heldGUID) ~= "locked" then self:Release(heldGUID) end
+        if not enabled or not risk or A.Store:Get(heldGUID) ~= "locked" then self:Release(heldGUID) end
     end
-    if enabled then
-        local risk = self:RiskyContext()
+    if enabled and risk then
         for itemGUID, mark in pairs(A.char.marks) do
             if mark.state == "locked" then
                 if self.holdsAvailable then
                     local location = read(C_Item.GetItemLocation, itemGUID)
                     if location and read(C_Item.DoesItemExist, location) == true
                         and guid(read(C_Item.GetItemGUID, location)) == itemGUID then
-                        if not risk and A.API:IsReusable(location) then
-                            -- Release only our own native hold, never the saved
-                            -- Locked mark. Cursor/deletion guards remain active.
-                            self:Release(itemGUID)
-                        elseif read(C_Item.IsLocked, location) == false then
+                        if read(C_Item.IsLocked, location) == false then
                             -- Set ownership before potentially synchronous events.
                             -- Invalidate an earlier release check so its callback
                             -- cannot discard this new hold after a context opens.

@@ -17,12 +17,12 @@ return function(M, A, test, eq, mark)
         eq(#M.sold, 0); eq(M.clearCalls, 0)
     end)
 
-    test("Locked consumables and items without a use effect retain permanent holds", function()
+    test("Locked consumables and items without a use effect remain usable", function()
         local consumable = reusable("Item-Consumable", 1, { consumable = true, count = 3 })
         local other = mark("Item-Other", 0, 2, "locked", { itemID = 101 })
-        eq(consumable.held, true); eq(other.held, true)
+        eq(consumable.held, nil); eq(other.held, nil)
         C_Container.UseContainerItem(0, 1); C_Container.UseContainerItem(0, 2)
-        eq(#M.used, 0); eq(consumable.count, 3); eq(M.bags[0][2], other)
+        eq(#M.used, 2); eq(consumable.count, 2); eq(M.bags[0][2], other)
     end)
 
     test("reusable use does not weaken cursor or deletion protection", function()
@@ -30,10 +30,9 @@ return function(M, A, test, eq, mark)
         C_Container.PickupContainerItem(0, 1)
         eq(M.cursor.item, item)
         event("CURSOR_CHANGED"); M.tick(0)
-        eq(M.cursor, nil); eq(M.bags[0][1], item)
-        C_Container.PickupContainerItem(0, 1)
+        eq(M.cursor.item, item)
         event("DELETE_ITEM_CONFIRM", "Reusable", 1, 1, 0, item.guid)
-        eq(M.cursor, nil); eq(M.bags[0][1], item); eq(M.clearCalls, 2)
+        eq(M.cursor, nil); eq(M.bags[0][1], item); eq(M.clearCalls, 1)
         eq(A.Store:Get(item.guid), "locked")
     end)
 
@@ -41,7 +40,6 @@ return function(M, A, test, eq, mark)
         { "merchant", "MERCHANT_SHOW", "MERCHANT_CLOSED" },
         { "mail", "MAIL_SHOW", "MAIL_CLOSED" },
         { "trade", "TRADE_SHOW", "TRADE_CLOSED" },
-        { "bank", "BANKFRAME_OPENED", "BANKFRAME_CLOSED" },
         { "auction", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED" },
     }) do
         test("Locked reusable items are held immediately during " .. context[1], function()
@@ -79,13 +77,13 @@ return function(M, A, test, eq, mark)
         eq(item.held, true)
     end)
 
-    test("item data loading releases only a verified reusable item's owned hold", function()
+    test("item data loading never gates ordinary use of a Locked item", function()
         local item = reusable(nil, nil, { uncached = true })
-        eq(item.held, true)
+        eq(item.held, nil)
         item.uncached = false
         event("GET_ITEM_INFO_RECEIVED", item.itemID, true); M.tick(0)
         eq(item.held, nil); eq(A.Store:Get(item.guid), "locked")
-        item.uncached = true; A.Refresh(); eq(item.held, true)
+        item.uncached = true; A.Refresh(); eq(item.held, nil)
         item.uncached = false
         event("ITEM_DATA_LOAD_RESULT", item.itemID, true); M.tick(0)
         eq(item.held, nil)
@@ -93,7 +91,7 @@ return function(M, A, test, eq, mark)
 
     for _, interface in ipairs({ "Blizzard", "Ellesmere" }) do
         for _, labels in ipairs({ true, false }) do
-            test(interface .. " hover releases a late-metadata hold with tooltip labels " .. tostring(labels), function()
+            test(interface .. " hover releases an older permanent hold with tooltip labels " .. tostring(labels), function()
                 A.SetOption("tooltips", labels)
                 M.reentrantLocks = true
                 local item = mark("Item-LateUse", 0, 1, "locked", { itemID = 211527 })
@@ -106,9 +104,10 @@ return function(M, A, test, eq, mark)
                     button = M.button(0, 1); A.Bags:Discover()
                 end
                 M.tick(0); A.eventFrame:Fire("OnUpdate", .3)
-                eq(item.held, true)
-                -- The item name was already cached, but its use spell becomes
-                -- readable later without either item-data event firing.
+                eq(item.held, nil)
+                -- Model an older permanent hold immediately before hovering.
+                -- The tooltip path must release it independently of metadata.
+                item.held, A.Protection.held[item.guid] = true, true
                 item.spellID = 429961
                 GameTooltip:SetOwner(button); GameTooltip:SetBagItem(0, 1)
                 eq(item.held, nil); eq(A.Protection.held[item.guid], nil)
@@ -133,18 +132,18 @@ return function(M, A, test, eq, mark)
         eq(item.held, nil); eq(A.Store:Get(item.guid), "locked")
     end)
 
-    test("missing, throwing or unreadable reusable metadata keeps the stricter hold", function()
+    test("missing, throwing or unreadable reusable metadata does not freeze normal use", function()
         local item = reusable(nil, nil, { consumable = true })
         item.consumable = false
         for _, api in ipairs({ "GetItemLink", "GetItemInfo", "GetItemSpell", "IsConsumableItem" }) do
             local original = C_Item[api]
-            C_Item[api] = nil; A.Refresh(); eq(item.held, true, api .. " absent")
+            C_Item[api] = nil; A.Refresh(); eq(item.held, nil, api .. " absent")
             C_Item[api] = function() error("unavailable metadata") end
-            A.Refresh(); eq(item.held, true, api .. " throws")
+            A.Refresh(); eq(item.held, nil, api .. " throws")
             C_Item[api] = function() return M.secret, M.secret end
-            A.Refresh(); eq(item.held, true, api .. " secret")
+            A.Refresh(); eq(item.held, nil, api .. " secret")
             C_Item[api] = function() end
-            A.Refresh(); eq(item.held, true, api .. " unknown")
+            A.Refresh(); eq(item.held, nil, api .. " unknown")
             C_Item[api] = original
         end
         A.Refresh(); eq(item.held, nil)
@@ -181,16 +180,18 @@ return function(M, A, test, eq, mark)
         M.targeting = false; event("CURRENT_SPELL_CAST_CHANGED", true)
         eq(item.held, nil)
         C_Container.PickupContainerItem(0, 1); event("CURSOR_CHANGED"); M.tick(0)
+        eq(M.cursor.item, item)
+        event("DELETE_ITEM_CONFIRM", "Reusable", 1, 1, 0, item.guid)
         eq(M.cursor, nil); eq(M.bags[0][1], item)
     end)
 
-    test("saved reusable marks stay usable after reload while other items stay held", function()
+    test("saved Locked marks permit all ordinary item use after reload", function()
         local item = reusable()
         local other = mark("Item-Other", 0, 2, "locked", { itemID = 101 })
         event("PLAYER_LOGOUT")
         A.Protection.stopping = nil; A.Store:Initialize()
         event("PLAYER_LOGIN"); M.tick(0)
-        eq(item.held, nil); eq(other.held, true)
+        eq(item.held, nil); eq(other.held, nil)
         eq(A.Store:Get(item.guid), "locked")
         C_Container.UseContainerItem(0, 1); eq(M.used[1], item.guid)
     end)
@@ -204,6 +205,8 @@ return function(M, A, test, eq, mark)
         C_Container.PickupContainerItem(0, 2); event("CURSOR_CHANGED")
         eq(M.cursor.item, normal); eq(M.clearCalls, 0); ClearCursor()
         C_Container.PickupContainerItem(0, 1); event("CURSOR_CHANGED"); M.tick(0)
+        eq(M.cursor.item, item)
+        event("DELETE_ITEM_CONFIRM", "Reusable", 1, 1, 0, item.guid)
         eq(M.cursor, nil); eq(M.bags[0][1], item)
         eq(A.Store:Get(normal.guid), nil)
     end)
@@ -230,7 +233,7 @@ return function(M, A, test, eq, mark)
             button:Fire("OnClick", "RightButton"); eq(M.used[1], item.guid)
             GameTooltip:SetOwner(button); GameTooltip:SetBagItem(0, 1)
             local labelled
-            for _, line in ipairs(GameTooltip.lines) do if line:find("Reusable:", 1, true) then labelled = true end end
+            for _, line in ipairs(GameTooltip.lines) do if line:find("Use and equip normally", 1, true) then labelled = true end end
             assert(labelled, "tooltip must explain usable Locked items")
             M.ctrl, M.shift = true, true; event("MODIFIER_STATE_CHANGED")
             eq(passesRight(), false)
@@ -257,12 +260,12 @@ return function(M, A, test, eq, mark)
         eq(M.bags[0][1], item); eq(A.Store:Get(item.guid), "locked")
     end)
 
-    test("unknown spell targeting stays held and item-ID targeting is covered", function()
+    test("unknown spell targeting permits normal use while positive item-ID targeting stays guarded", function()
         local item = reusable()
         local targeting, targetItem, targetID = SpellIsTargeting, SpellCanTargetItem, SpellCanTargetItemID
         SpellIsTargeting = function() return M.secret end
         SpellCanTargetItem, SpellCanTargetItemID = nil, nil
-        event("CURRENT_SPELL_CAST_CHANGED"); eq(item.held, true)
+        event("CURRENT_SPELL_CAST_CHANGED"); eq(item.held, nil)
         SpellIsTargeting = function() return true end
         SpellCanTargetItem = function() return false end
         SpellCanTargetItemID = function() return true end

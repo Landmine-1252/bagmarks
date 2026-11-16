@@ -1,11 +1,17 @@
 # BagMarks Changelog
 
-## 1.0.4 - Safer sorting with Locked reusable items
+## 1.0.4 - Keep Locked items usable
+
+### Changed
+
+- Equip and use Locked items normally, including weapons, armor, and consumables. Intentional consumable use can consume the item; the Locked mark protects against selling, mailing, trading, dropping, and deleting it.
+- Allow dragging gear to equipment slots and moving items within inventory or the bank without clearing the mark. Marks continue to follow each item's GUID.
+- Apply native item holds during merchant, mail, trade, auction, and item-targeting actions. Ordinary use no longer depends on cached use-spell or consumable metadata.
 
 ### Fixed
 
 - Let a bag sort finish its pickup-and-place sequence before checking for a Locked item left on the cursor. This addresses a reproduced conflict with Ellesmere sorting that interrupted moves involving reusable items such as Cozy Sleeping Bag.
-- Keep deletion protection immediate. An unfinished manual drag is checked on the next frame, while the item's Locked mark and merchant, mail, trade, and item-targeting guards remain active.
+- Keep deletion protection immediate. Cursor checks permit ordinary equipment drags and return Locked cursor items during transfer or item-targeting contexts.
 - Pair native item holds with a matching location-based release when available. Keep release tracking until the client confirms the same item is free, including while sorting or server movement keeps an item busy.
 
 ### Improved
@@ -14,7 +20,7 @@
 
 ### Validation
 
-- The sorting regression interrupts a pickup/place sequence on the earlier code and passes with this fix. The user installed 1.0.4, logged out and back in to clear the existing stuck state, and confirmed the Locked sleeping bag remains usable after Ellesmere sorting. Offline checks cover completed swaps, unfinished drags, immediate deletion checks, identical copies, combat, and native release verification. Broader interaction and taint checks remain pending.
+- The equip regression fails with the earlier permanent-hold behavior and passes with this change. The user confirmed both right-click and dragged equipping while Locked, and that dropping an expendable Locked item is cancelled and returns it. Offline checks cover equipped GUID marks, consumable use, transfer safeguards, immediate deletion checks, sorting, and release verification. The earlier sorting repair was also user-confirmed. Broader interaction paths and taint checks remain pending.
 
 ## 1.0.3 - Full-size marks and reusable-item fixes
 

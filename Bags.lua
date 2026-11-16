@@ -39,7 +39,7 @@ function Bags:Click(overlay, mouseButton)
     elseif item and shown and shown.total then
         A.Print("This group includes a Locked stack. Use the BagMarks menu to choose an individual stack, or switch to an unmerged bag view.")
     elseif item and A.Store:Get(item.guid) == "locked" then
-        A.Print("Locked. Close the current merchant, mail, trade, bank, or auction window and finish item targeting to use reusable items. Clear the mark to move or transfer this item.")
+        A.Print("Locked. Close the merchant, mail, trade, or auction window and finish item targeting to use or equip this item. Clear the mark before selling, mailing, trading, or deleting it.")
     end
 end
 
@@ -218,12 +218,10 @@ function Bags:Tooltip(tooltip)
     local item = self:Read(owner)
     if not item then return end
     local state = A.Store:Get(item.guid)
-    local reusable = state == "locked" and A.API:IsReusable(item.location)
-    -- Hover can expose use-spell data without another item-data event. Recheck
-    -- an earlier conservative hold before the player's ordinary click, even
-    -- with tooltip labels disabled. SyncHolds still validates the exact GUID
-    -- and all transfer/targeting guards; the saved Locked mark is kept.
-    if reusable and A.Protection.held[item.guid] and not self:RiskyContext() then A.Protection:SyncHolds() end
+    -- Release an earlier context hold before an ordinary use/equip click, even
+    -- with labels disabled. Metadata and consumable status are not prerequisites
+    -- for normal gameplay; transfer/targeting contexts still hold Locked GUIDs.
+    if state == "locked" and A.Protection.held[item.guid] and not self:RiskyContext() then A.Protection:SyncHolds() end
     if not A.db.tooltips then return end
     local shown = A.Ellesmere and A.Ellesmere.slots[owner]
     if shown and shown.total then
@@ -232,19 +230,15 @@ function Bags:Tooltip(tooltip)
         tooltip:AddLine("BagMarks: " .. (mixed and "Mixed marks" or (state and A.states[state] or "Normal"))
             .. " (" .. count .. " stacks)", 1, .82, .3)
         tooltip:AddLine("Use your marking shortcut to choose one stack. Each stack keeps its own mark.", 1, 1, 1, true)
-        if hasLocked then tooltip:AddLine("Includes a Locked stack. Clear that stack's mark before moving or transferring it. Reusable items can still be used.", 1, .72, .3, true) end
+        if hasLocked then tooltip:AddLine("Includes a Locked stack. Use and equip normally. Clear its mark before selling, mailing, trading, or deleting it.", 1, .72, .3, true) end
         return
     end
     if state then
         local color = A.Themes[A.db.theme][state]
         tooltip:AddLine("BagMarks: " .. A.states[state], color[1], color[2], color[3])
         if state == "locked" then
-            if reusable then
-                tooltip:AddLine("Reusable: can be used while Locked. Close merchant, mail, trade, bank, and auction windows and finish item targeting first.", 1, .72, .3, true)
-                tooltip:AddLine("Clear this mark before moving or transferring the item.", 1, .72, .3, true)
-            else
-                tooltip:AddLine("Clear this mark before moving, using, or transferring the item.", 1, .72, .3, true)
-            end
+            tooltip:AddLine("Use and equip normally while Locked. Consumables can still be consumed.", 1, .72, .3, true)
+            tooltip:AddLine("Clear the mark before selling, mailing, trading, or deleting this item.", 1, .72, .3, true)
             tooltip:AddLine("Some direct game actions can bypass addon protection.", 1, .72, .3, true)
         end
     end

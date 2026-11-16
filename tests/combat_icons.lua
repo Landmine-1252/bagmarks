@@ -37,7 +37,7 @@ return function(M, A, test, eq, mark)
             overlay:Fire("OnClick", "RightButton")
         end
         eq(A.mode, false); eq(M.menu, nil)
-        eq(A.Store:Get("Item-1"), "locked"); eq(M.bags[0][1].held, true)
+        eq(A.Store:Get("Item-1"), "locked"); eq(M.bags[0][1].held, nil)
         eq(A.Store:Get("Item-2"), "junk"); eq(A.Store:Get("Item-3"), "mail")
     end)
 

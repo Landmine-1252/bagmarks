@@ -25,7 +25,8 @@ return function(M, A, test, eq, mark)
         target[index or 1] = item
     end
 
-    test("native hold blocks ordinary pickup and use of only the Locked instance", function()
+    test("trade-context hold blocks pickup and use of only the Locked instance", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         local locked = mark("Item-L", 0, 1, "locked")
         local normal = M.item("Item-N", 0, 2)
         mark("Item-J", 0, 3, "junk"); mark("Item-M", 0, 4, "mail")
@@ -37,6 +38,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("clearing or changing a Locked mark immediately releases its own hold", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         local item = mark("Item-L", 0, 1, "locked")
         for _, state in ipairs({ "junk", "mail", "normal" }) do
             A.Store:Set(A.API:Read(0, 1), state ~= "normal" and state or nil)
@@ -48,6 +50,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("disabling releases owned holds, reenabling and reload reapply saved marks", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         local item = mark("Item-L", 0, 1, "locked")
         A.SetOption("enabled", false); eq(item.held, nil); eq(A.Store:Get(item.guid), "locked")
         A.SetOption("enabled", true); eq(item.held, true)
@@ -57,6 +60,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("preexisting native holds are never acquired or released by BagMarks", function()
+        A.tradeOpen = true
         local item = mark("Item-Foreign", 0, 1, "locked", { held = true })
         local busy = mark("Item-Busy", 0, 2, "locked", { busy = true })
         eq(M.lockCalls, 0)
@@ -65,6 +69,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("lost holds are reacquired without reentrant lock-event loops", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         M.reentrantLocks = true
         local item = mark("Item-L", 0, 1, "locked")
         M.tick(0); eq(M.lockCalls, 1)
@@ -74,7 +79,8 @@ return function(M, A, test, eq, mark)
         eq(item.held, nil); eq(#M.unlockCalls, 1); eq(next(M.timers), nil)
     end)
 
-    test("closed-bank marks receive a hold when their exact GUID becomes accessible", function()
+    test("inaccessible GUIDs receive a transfer-context hold only once accessible", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         A.bankOpen = true
         local item = mark("Item-Bank", 6, 1, "locked")
         event("PLAYER_LOGOUT"); A.Protection.stopping = nil
@@ -85,6 +91,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("failed native acquisitions warn without claiming ownership or unlocking foreign state", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         M.rejectLock = true
         local item = mark("Item-L", 0, 1, "locked")
         eq(A.Protection.held[item.guid], nil); assert(message("Could not hold"))
@@ -95,6 +102,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("throwing and missing native hold APIs keep marks and do not crash", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         M.failLock = true
         local item = mark("Item-L", 0, 1, "locked")
         eq(A.Protection.held[item.guid], nil); eq(item.held, nil)
@@ -106,6 +114,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("unknown or secret native locations and lock state never select an identical copy", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         M.secretLocation = true
         local item = mark("Item-L", 0, 1, "locked")
         local other = M.item("Item-Other", 0, 2)
@@ -116,6 +125,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("a stale GUID lookup cannot hold a replacement item at that location", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         local locked = mark("Item-L", 0, 1, "locked")
         local other = M.item("Item-Other", 0, 2)
         locked.held = nil
@@ -126,6 +136,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("a refused release is retried for the same owned GUID", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         local item = mark("Item-L", 0, 1, "locked")
         M.failUnlock = true
         A.Store:Set(A.API:Read(0, 1), nil); eq(item.held, true)
@@ -135,6 +146,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("native holds and cursor fallback remain active while marking pauses in combat", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         local item = mark("Item-L", 0, 1, "locked")
         M.combat = true; event("PLAYER_REGEN_DISABLED")
         eq(item.held, true); eq(A.CanAct(), false)
@@ -146,6 +158,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("cursor fallback returns a known Locked GUID after cursor changes settle without recursion", function()
+        A.tradeOpen = true -- Exercise native holds only while transfer protection applies.
         local item = mark("Item-L", 0, 1, "locked")
         M.forcePickup(0, 1); M.reentrantCursor = true
         event("CURSOR_CHANGED"); M.tick(0)

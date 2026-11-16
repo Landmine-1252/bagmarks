@@ -201,6 +201,11 @@ C_Container = {
         if not M.A.merchantOpen then
             assert(not M.A.mailOpen and not M.A.tradeOpen and not M.targeting, "unsafe ordinary use")
             M.used[#M.used + 1] = i.guid
+            if i.equipSlot then
+                local previous = M.equipped[i.equipSlot]
+                M.equipped[i.equipSlot], M.bags[bag][slot] = i, previous
+                return
+            end
             if i.consumable then
                 i.count = i.count - 1
                 if i.count == 0 then M.bags[bag][slot] = nil end
@@ -221,6 +226,7 @@ C_Container = {
 }
 local function locatedItem(location)
     if location.cursor then return M.cursor and M.cursor.item end
+    if location.equipmentSlot then return M.equipped[location.equipmentSlot] end
     return at(location.bag, location.slot)
 end
 C_Cursor = { GetCursorItem = function()
@@ -248,6 +254,9 @@ C_Item = {
     GetItemLocation = function(guid)
         if M.locationFailure then error("location unavailable") end
         if M.secretLocation then return M.secret end
+        for slot, item in pairs(M.equipped or {}) do
+            if item.guid == guid then return { equipmentSlot = slot } end
+        end
         for bag, items in pairs(M.bags) do
             if bag < 6 or M.A.bankOpen then
                 for slot, item in pairs(items) do
@@ -531,6 +540,7 @@ end
 
 function M.reset(A)
     M.A, M.bags, M.info, M.attachments, M.messages, M.sold, M.timers = A, {}, {}, {}, {}, {}, {}
+    M.equipped = {}
     M.time, M.bindings, M.overrides, M.bindingSet, M.savedBindingSet = 0, {}, nil, 1, nil
     M.cursor, M.rejectSale, M.rejectMail, M.combat, M.alt, M.ctrl, M.shift, M.targeting, M.failKey = nil, nil, nil, false, false, false, false, false, nil
     M.containers, M.bankButtons, M.reads = {}, {}, 0

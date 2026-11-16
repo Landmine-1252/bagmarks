@@ -70,7 +70,7 @@ The helper attaches eligible **Mail** items while space remains. Bound items are
 
 ## A few things to know
 
-- **Locked items:** Reusable items can still be used with merchant, mail, trade, bank, and auction windows closed. Bag sorting can reposition them while keeping their mark. Clear the mark before manually moving or transferring them. Some actions and addons bypass protection; see the [protection limits](docs/API_COMPATIBILITY.md).
+- **Locked items:** Equip, use, sort, and move them normally. Consumables can still be consumed. Clear the mark before selling, mailing, trading, or deleting them. Close merchant, mail, trade, and auction windows and finish item targeting before ordinary use. Some actions and addons bypass protection; see the [protection limits](docs/API_COMPATIBILITY.md).
 - **Saved choices:** Settings are shared across characters; marks belong to each character and follow bag movements. Check marks after splitting or merging stacks.
 - **Combat:** Marking, keybinding changes, and sale/mail helpers pause. Settings remain accessible. Existing icons stay visible when readable; new slots may wait until combat ends.
 - **EllesmereUI Bags:** Keep the icon column visible in List view. Combined stacks let you choose which individual stack to mark.

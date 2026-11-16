@@ -24,6 +24,7 @@ return function(M, A, test, eq, mark)
 
     test("clearing a mark while an independent sort busy flag remains does not lose release state", function()
         local item = mark("Item-Bag", 0, 1, "locked", { itemID = 211527 })
+        event("TRADE_SHOW")
         item.busy = true
         A.Store:Set(A.API:Read(0, 1), nil)
         eq(item.held, nil); eq(item.busy, true)
@@ -69,6 +70,7 @@ return function(M, A, test, eq, mark)
 
     test("preexisting sort busy states never become BagMarks-owned release requests", function()
         local item = mark("Item-Bag", 0, 1, "locked", { itemID = 211527, spellID = 429961, busy = true })
+        event("TRADE_SHOW")
         A.Store:Set(A.API:Read(0, 1), nil); A.Refresh(); M.tick(3)
         eq(item.busy, true); eq(#M.unlockCalls, 0)
         eq(A.Protection.held[item.guid], nil)

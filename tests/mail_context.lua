@@ -23,7 +23,7 @@ return function(M, A, test, eq, mark)
         -- Deliberately omit MAIL_CLOSED, as in the captured client report.
         poll(); M.tick(0)
         eq(A.mailOpen, false); eq(sleeping.held, nil); eq(hearth.held, nil)
-        eq(other.held, true); eq(A.Store:Get(sleeping.guid), "locked")
+        eq(other.held, nil); eq(A.Store:Get(sleeping.guid), "locked")
         C_Container.UseContainerItem(0, 1); eq(M.used[1], sleeping.guid)
         local queries = M.mailQueries
         poll(); poll(); eq(M.mailQueries, queries, "closed mail must stop idle queries")

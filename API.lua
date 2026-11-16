@@ -90,9 +90,9 @@ function API:Find(guid, includeBank)
 end
 
 function API:IsReusable(location)
-    -- Never infer safety from an item name, class, cooldown or usability today.
+    -- Diagnostic classification only; it never gates ordinary use/equipping.
     -- Read the live item's link and require cached data, a use effect and the
-    -- client's explicit nonconsumable result. Unknown/secret data stays held.
+    -- client's explicit nonconsumable result. Unknown/secret data is unclassified.
     if not C_Item or type(C_Item.GetItemLink) ~= "function" or type(C_Item.GetItemInfo) ~= "function"
         or type(C_Item.GetItemSpell) ~= "function" or type(C_Item.IsConsumableItem) ~= "function" then return false end
     local linkOK, link = pcall(C_Item.GetItemLink, location)

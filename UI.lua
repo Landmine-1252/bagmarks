@@ -1,3 +1,5 @@
+-- Shared native-looking widgets, a reusable confirmation dialog, and item
+-- menus. Menu callbacks carry GUIDs so delayed choices survive slot movement.
 local _, A = ...
 A.UI = {}
 local UI = A.UI
@@ -40,6 +42,7 @@ function UI.Window(name, title, width, height)
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame.TitleText:SetText(title)
+    -- Named windows join Blizzard's Escape-to-close list without key overrides.
     UISpecialFrames[#UISpecialFrames + 1] = name
     frame:Hide()
     return frame
@@ -60,11 +63,14 @@ function UI:Confirm(title, text, acceptText, callback)
         f.body:SetJustifyH("LEFT")
         f.body:SetJustifyV("TOP")
         f.accept = self.Button(f, "Confirm", 160, 20, -298, function()
+            -- OnHide clears the stored callback for cancellation. Copy it first
+            -- so accepting can close the dialog before running the chosen action.
             local action = f.callback
             f:Hide()
             if action then action() end
         end)
         self.Button(f, "Cancel", 160, 210, -298, function() f:Hide() end)
+        -- Escape, Cancel, and programmatic close all discard the pending action.
         f:SetScript("OnHide", function() f.callback = nil end)
         self.confirm = f
     end
@@ -90,6 +96,8 @@ function UI:ItemChoices(root, item)
         { "Mark for Mail", "mail" }, { "Clear Mark", false },
     }
     for _, choice in ipairs(choices) do
+        -- false keeps Clear Mark in the choices table; Store represents Normal
+        -- with nil, which removes the saved record for this GUID.
         local state = choice[2] or nil
         root:CreateRadio(choice[1], function() return A.Store:Get(guid) == state end, function()
             if not A.CanAct() then return end

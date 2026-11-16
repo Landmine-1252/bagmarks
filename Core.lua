@@ -1,8 +1,13 @@
+-- WoW passes the same private addon table to each Lua file in TOC order.
+-- Modules share state through A; Blizzard's named entry points use globals.
 local addonName, A = ...
 A.name = addonName
 A.version = "1.0.2"
+-- SavedVariables format version, independent of the addon release number.
 A.schema = 2
 A.states = { locked = "Locked", junk = "Junk", mail = "Mail" }
+-- Store.lua fills missing/invalid options from these values and keeps valid
+-- saved choices, including shortcuts selected before a default changed.
 A.defaults = {
     enabled = true, minimap = true, tooltips = true, overlays = true,
     modifier = "CTRL-SHIFT", mouseButton = "RightButton", markingAction = "menu",
@@ -11,6 +16,7 @@ A.defaults = {
 A.mode = false -- Intentionally session-only, to avoid surprising right clicks after login.
 
 function A.Safe(value)
+    -- Restricted client values must be rejected before comparison or formatting.
     return not issecretvalue or not issecretvalue(value)
 end
 
@@ -24,6 +30,8 @@ function A.Print(message)
     end
 end
 
+-- Native protection uses IsEnabled even in combat. Marking and queued item
+-- actions use CanAct, which adds the combat restriction.
 function A.IsEnabled()
     return A.db and A.db.enabled and not A.readOnly and A.API.available
 end
@@ -34,6 +42,8 @@ end
 
 function A.Refresh()
     if not A.ready then return end
+    -- Apply holds first so refreshed click guards and indicators reflect the
+    -- current marks. Individual modules handle their own combat restrictions.
     A.Protection:Refresh()
     A.Bags:Discover()
     A.Bags:Refresh()

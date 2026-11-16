@@ -17,6 +17,8 @@ def release_files(root):
     files += list((root / "Media").glob("*.png")) + list((root / "docs").glob("*.md"))
     payload = {}
     for path in sorted(files):
+        # Capture source bytes once. The finished archive must match this exact
+        # payload, including files added locally before the next commit.
         if path.is_symlink():
             raise ValueError(f"Release files must not be symlinks: {path}")
         payload[f"{ADDON}/{path.relative_to(root).as_posix()}"] = path.read_bytes()
@@ -36,6 +38,8 @@ def validate_archive(path, expected=None):
     """Check our release format locally. This does not emulate CurseForge moderation."""
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
+        # WoW installations often use case-insensitive filesystems. Two entries
+        # that differ only in case would collide when a player extracts them.
         if len(names) != len({name.casefold() for name in names}):
             raise ValueError("Duplicate or case-colliding archive paths")
         entries = {entry.filename: entry for entry in archive.infolist()}
@@ -92,6 +96,8 @@ def build_archive(root, output=None):
     output = output or root / "dist" / f"{ADDON}-{match[1]}.zip"
     output.parent.mkdir(parents=True, exist_ok=True)
     directories = {f"{ADDON}/"}
+    # Emit real folder records as well as files. A valid single-root install
+    # should not depend on the extractor inventing omitted parent directories.
     for name in payload:
         parts = name.split("/")
         directories.update("/".join(parts[:index]) + "/" for index in range(1, len(parts)))

@@ -1,8 +1,12 @@
+-- A single queue serves manual sales, automatic sales, and mail attachments.
+-- Each job snapshots GUIDs, issues one request, then polls before advancing.
+-- Cancellation never clears marks, so unfinished items remain available later.
 local _, A = ...
 local Ops = {}
 A.Operations = Ops
 
 local function ordered(items)
+    -- Stable bag/slot order keeps previews and attachment batches predictable.
     local list = {}
     for _, item in pairs(items) do list[#list + 1] = item end
     table.sort(list, function(a, b) return a.bag == b.bag and a.slot < b.slot or a.bag < b.bag end)
@@ -10,6 +14,8 @@ local function ordered(items)
 end
 
 function Ops:Eligible(item, state)
+    -- A mark alone is insufficient: busy, changed, quest, refundable, and
+    -- otherwise ineligible items must also stay out of every automated path.
     if not A.Store:Eligible(item, state) or A.API:IsQuest(item) or A.API:Refundable(item) then return false end
     if state == "junk" then return A.API:SellPrice(item) ~= nil end
     return state == "mail" and A.API:CanMail(item)
@@ -102,6 +108,8 @@ function Ops:Cancel(message)
     local active = self.job ~= nil
     self.autoSalePending = nil
     self.job = nil
+    -- Old confirmation callbacks retain this number; changing it invalidates
+    -- their authority to start a sale after the context has closed or changed.
     self.generation = (self.generation or 0) + 1
     A.UI:CloseConfirmation()
     self:RefreshButtons()
@@ -137,6 +145,8 @@ function Ops:Step()
         self:Cancel("An item changed or is unavailable. Review the remaining marked items and try again.")
         return
     end
+    -- Record the in-flight item before calling APIs that can fire events
+    -- synchronously. A successful call still needs the checks in Poll below.
     job.pending = entry
     job.started = GetTime()
     local ok
@@ -162,6 +172,8 @@ end
 
 function Ops:SchedulePoll(job)
     C_Timer.After(.15, function()
+        -- Table identity separates this job from a cancelled/replaced queue.
+        -- The old timer may still run, but it cannot advance the new job.
         if self.job == job then self:Poll() end
     end)
 end
@@ -174,6 +186,9 @@ function Ops:Poll()
         self:Cancel("Operation stopped. Remaining markings were kept."); return
     end
     local present = A.API:Find(job.pending.guid, false)
+    -- Observe the GUID leaving carried bags. Mail also needs the expected
+    -- item type/count in the chosen attachment slot; pcall alone proves none
+    -- of this. Timeout stops the queue instead of retrying an uncertain action.
     local complete = not present
     if job.kind == "mail" then
         local name, itemID, _, count = GetSendMailItem(job.attachment)
@@ -237,6 +252,8 @@ function Ops:CreateButtons()
         A.UI.Tip(self.mailButton, "Attach Marked Items", "Attach eligible Mail stacks to free slots. Review them and click Send yourself. Unsent marks are retained.")
     end
     if MerchantSellAllJunkButton and not self.nativeJunkGuard then
+        -- This separate button intercepts clicks only while our guard is shown.
+        -- It does not replace Blizzard's handler or veto other addons' sales.
         local guard = CreateFrame("Button", nil, UIParent)
         guard:SetAllPoints(MerchantSellAllJunkButton)
         guard:SetFrameStrata(MerchantSellAllJunkButton:GetFrameStrata())

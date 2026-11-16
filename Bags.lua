@@ -1,3 +1,6 @@
+-- Adapt supported bag buttons without replacing their native frames/scripts.
+-- overlays maps item button -> our input button; inputOwners is the reverse
+-- lookup used by hover marking when our input button is the mouse focus.
 local _, A = ...
 local Bags = { overlays = {}, inputOwners = {}, hooks = {} }
 A.Bags = Bags
@@ -27,6 +30,8 @@ function Bags:Click(overlay, mouseButton)
     if not A.CanAct() then return end
     local item = self:Read(overlay.owner)
     local shown = A.Ellesmere and A.Ellesmere.slots[overlay.owner]
+    -- The marking gesture takes precedence over a lock guard so the player can
+    -- clear a mark. All other captured clicks are warnings, never forwarded uses.
     if A.Interaction:Matches(mouseButton) then
         if item and shown and shown.total then A.Ellesmere:OpenGroup(overlay.owner, item)
         elseif item then A.Interaction:Mark(overlay.owner, item)
@@ -118,6 +123,8 @@ function Bags:Update(button)
     if inCombat then return end -- No marking, click guards, or mouse changes.
     local marking = A.Interaction:Active()
     local guard = hasLocked and self:RiskyContext()
+    -- Preserve ordinary modified left-click links/previews outside targeting.
+    -- Native item holds still apply independently of this visual input guard.
     local modifiedLeft = (IsShiftKeyDown() or IsControlKeyDown()) and not (SpellIsTargeting and SpellIsTargeting())
     local blocked, passthrough = {}, {}
     if marking then blocked[A.db.mouseButton] = true end
@@ -128,12 +135,16 @@ function Bags:Update(button)
     for _, option in ipairs(A.Interaction.buttons) do
         if not blocked[option[1]] then passthrough[#passthrough + 1] = option[1] end
     end
+    -- A visible mark does not imply click capture: every unblocked button goes
+    -- straight to the native item frame through this overlay.
     overlay:SetPassThroughButtons(unpack(passthrough))
     overlay:SetShown(marking or guard or (state ~= nil and A.db.overlays))
 end
 
 function Bags:Refresh()
     for button in pairs(self.overlays) do self:Update(button) end
+    -- Refresh the currently owned bag tooltip as well as the icon so a mark
+    -- change is visible without requiring the mouse to leave and reenter.
     if GameTooltip and GameTooltip:IsShown() and not A.InCombat() then
         local owner = GameTooltip:GetOwner()
         if owner and self.overlays[owner] and GameTooltip.SetBagItem then
@@ -197,6 +208,8 @@ end
 function Bags:InstallHooks()
     if A.Ellesmere then A.Ellesmere:Install() end
     local function hook(key, object, method, callback)
+        -- Loading another addon can retry installation. Register each post-hook
+        -- once so repeated load events do not multiply updates or change handlers.
         if not self.hooks[key] and object and type(object[method]) == "function" then
             hooksecurefunc(object, method, callback)
             self.hooks[key] = true

@@ -31,6 +31,8 @@ def read_release(root, tag=None, repository=None):
 
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     notes = []
+    # Only the matching version becomes release notes. Other versions and an
+    # Unreleased section may coexist without leaking into the published entry.
     for section in re.split(r"^##[ \t]+", changelog, flags=re.MULTILINE)[1:]:
         heading, _, body = section.partition("\n")
         if re.fullmatch(re.escape(version) + r"(?:[ \t]+.*)?", heading):

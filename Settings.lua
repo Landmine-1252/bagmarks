@@ -1,3 +1,5 @@
+-- Reusable settings window built from unprotected native widgets. Most options
+-- refresh through A.SetOption; mail edits and key capture have separate lifecycles.
 local _, A = ...
 local SettingsUI = {}
 A.Settings = SettingsUI
@@ -8,6 +10,8 @@ function SettingsUI:Create()
     local f = UI.Window("BagMarksSettings", "BagMarks " .. A.version, 420, 530)
     self.frame, self.checks, self.tabs, self.panels = f, {}, {}, {}
     self.bindingAction = A.Bindings.action
+    -- Blizzard's tab helpers use this ordered array plus selectedTab to choose
+    -- active artwork. Our named panels hold each page's controls separately.
     f.Tabs, f.numTabs, f.minTabWidth, f.maxTabWidth = {}, 3, 112, 112
     for i, name in ipairs({ "General", "Marking", "Appearance" }) do
         local page = name
@@ -63,6 +67,8 @@ function SettingsUI:Create()
     recipient:SetScript("OnTextChanged", function(widget, userInput)
         if userInput and not A.readOnly then A.db.recipient = widget:GetText():gsub("[%c|]", ""):match("^%s*(.-)%s*$") end
     end)
+    -- Defer compose autofill until editing finishes, so a partly typed saved
+    -- recipient cannot be copied into an already open mail draft.
     recipient:SetScript("OnEditFocusLost", function() A.Mail:QueueFill() end)
     UI.Tip(recipient, "Mail recipient", "Character or Character-Realm. Auto-fill uses this name only for a new, empty recipient. Replies and names you type are preserved.")
     self.recipient = recipient
@@ -82,6 +88,8 @@ function SettingsUI:Create()
     self.interactionHint:SetJustifyH("LEFT")
 
     UI.Label(marking, "Keyboard shortcut", 0, -150, "GameFontNormal")
+    -- This selector chooses which binding to edit; both actions remain usable.
+    -- Cancel capture before changing it so a key cannot land on the wrong action.
     self.bindingChoice = UI.Button(marking, "", 200, 172, -144, function(owner)
         A.Bindings:StopCapture()
         MenuUtil.CreateContextMenu(owner, function(_, root)
@@ -152,6 +160,7 @@ function SettingsUI:SelectTab(name)
         panel:SetShown(tab == name)
     end
     PanelTemplates_SetTab(self.frame, self.tabs[name]:GetID())
+    -- A hidden edit/capture control must not keep consuming the player's input.
     if name ~= "General" then self.recipient:ClearFocus() end
     if name ~= "Marking" then A.Bindings:StopCapture() end
 end
@@ -172,6 +181,8 @@ function SettingsUI:Refresh()
     self.markingAction:SetEnabled(menuEnabled)
     self.interactionHint:SetText(A.Interaction:Hint() .. (A.db.markingAction == "cycle"
         and "\nNormal > Locked > Junk > Mail > Normal" or "\nChoose a mark from the compact item menu."))
+    -- Refreshes also come from bag events. Preserve text/caret while the user
+    -- edits instead of replacing their input with the sanitized saved value.
     if not self.recipient:HasFocus() then self.recipient:SetText(A.db.recipient) end
     local hovering = self.bindingAction == A.Bindings.hoverAction
     self.bindingChoice:SetText(hovering and "Cycle hovered item" or "Toggle marking mode")
@@ -209,6 +220,8 @@ function SettingsUI:Toggle()
 end
 
 function SettingsUI:RegisterCategory()
+    -- Register a small launcher in Blizzard settings; reuse the same compact
+    -- window opened by slash commands and the minimap instead of a second UI.
     if self.category or not Settings or not Settings.RegisterCanvasLayoutCategory or not Settings.RegisterAddOnCategory then return end
     local panel = CreateFrame("Frame", nil, UIParent)
     panel:Hide()

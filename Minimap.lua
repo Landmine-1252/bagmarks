@@ -1,8 +1,11 @@
+-- Standalone minimap launcher that yields placement/visibility to collectors.
+-- The shared AddOns compartment uses the same actions through named callbacks.
 local _, A = ...
 local Mini = {}
 A.Minimap = Mini
 
 -- Standard radial placement, with common square-minimap shape conventions.
+-- Each quadrant flag chooses a curved (true) or square (false) boundary.
 local shapes = {
     ["ROUND"] = { true, true, true, true }, ["SQUARE"] = { false, false, false, false },
     ["CORNER-TOPLEFT"] = { false, false, false, true }, ["CORNER-TOPRIGHT"] = { false, false, true, false },
@@ -32,6 +35,8 @@ function Mini:Position()
     local quadrant = (x < 0 and 1 or 0) + (y > 0 and 2 or 0) + 1
     local shape = shapes[GetMinimapShape and GetMinimapShape() or "ROUND"] or shapes.ROUND
     if not shape[quadrant] then
+        -- Project the unit circle direction onto a square edge without changing
+        -- its angle. Width/height scaling below also handles rectangular minimaps.
         local divisor = math.max(math.abs(x), math.abs(y))
         x, y = x / divisor, y / divisor
     end
@@ -62,6 +67,8 @@ function Mini:StopDrag()
     self.dragging = false
     self.dragFrame:SetScript("OnUpdate", nil)
     self.dragFrame:Hide()
+    -- A drag release can also fire OnClick. Keep the suppression flag through
+    -- this frame so moving the button does not open settings or toggle mode.
     C_Timer.After(0, function() self.justDragged = false end)
 end
 
@@ -77,6 +84,8 @@ function Mini:StartDrag()
         local x, y = GetCursorPosition()
         local cx, cy = Minimap:GetCenter()
         local scale = Minimap:GetEffectiveScale()
+        -- Store an angle rather than screen coordinates so placement survives
+        -- resolution/UI-scale changes when BagMarks still owns the button.
         A.db.angle = math.deg(math.atan2(y / scale - cy, x / scale - cx)) % 360
         self:Position()
     end)

@@ -1,3 +1,5 @@
+-- Lifecycle and event routing. Inventory refreshes are delayed and combined;
+-- protection checks that must react before the next click run synchronously.
 local addonName, A = ...
 local frame = CreateFrame("Frame")
 A.eventFrame = frame
@@ -11,6 +13,8 @@ local function updateInventory()
 end
 
 local function queueRefresh()
+    -- One action may emit several bag events. Scan once on the next frame to
+    -- let related slot updates settle instead of rescanning for each event.
     if A.pendingRefresh then return end
     A.pendingRefresh = true
     C_Timer.After(0, updateInventory)
@@ -31,6 +35,8 @@ function A.Slash(message)
 end
 
 local function initialize()
+    -- SavedVariables are available at our ADDON_LOADED event. Establish API
+    -- capabilities and sanitized state before any UI callback can use them.
     A.API:Initialize()
     A.Store:Initialize()
     A.ready = true
@@ -52,6 +58,8 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
     if event == "ADDON_LOADED" then
         if arg1 == addonName then initialize()
         elseif A.ready then
+            -- Blizzard panels and bag addons may load later. These installers
+            -- remember their hooks/buttons, so retrying does not duplicate them.
             A.Bags:InstallHooks()
             A.Mail:InstallHooks()
             A.Operations:CreateButtons()
@@ -62,12 +70,16 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
     end
     if not A.ready then return end
     if event == "DELETE_ITEM_CONFIRM" then
+        -- The fifth event argument is the optional GUID being deleted. Return
+        -- the cursor now rather than waiting for a deferred inventory refresh.
         A.Protection:ReturnCursor(arg5, true)
         A.Protection:SyncHolds()
     elseif event == "PLAYER_LOGOUT" then
         A.Operations:Cancel()
         A.Protection:Stop()
     elseif event == "PLAYER_REGEN_DISABLED" then
+        -- Deliberately exit mode instead of resuming it after combat, when a
+        -- player may expect their first ordinary click to use an item again.
         A.mode = false
         A.Bindings:StopCapture()
         A.Operations:Cancel()
@@ -78,6 +90,7 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         A.Mail:QueueFill()
         queueRefresh()
     elseif event == "MERCHANT_SHOW" then
+        -- Start automatic selling once per opening, not on every merchant event.
         local opening = not A.merchantOpen
         A.merchantOpen = true
         A.Protection:SyncHolds() -- Protect reusable items before deferred UI/sale work.
@@ -174,6 +187,8 @@ frame:SetScript("OnUpdate", function(_, delta)
     if elapsed < .2 then return end
     elapsed = 0
     A.Bags:Discover()
+    -- Some target/context changes have no useful bag event. Resync holds only
+    -- when this risk classification changes, not on every discovery tick.
     local risk = A.Bags:RiskyContext() and true or false
     if risk ~= lastRisk then A.Protection:SyncHolds(); A.Bags:Refresh(); lastRisk = risk end
     A.Operations:RefreshButtons()

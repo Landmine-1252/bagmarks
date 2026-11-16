@@ -1,3 +1,5 @@
+-- Shared mouse gesture and mark-cycle rules. Bag frames decide which item is
+-- targeted; this module decides whether the gesture matches and how to mark it.
 local _, A = ...
 local Interaction = {}
 A.Interaction = Interaction
@@ -19,12 +21,15 @@ for _, option in ipairs(Interaction.buttons) do Interaction.buttonLabels[option[
 for _, option in ipairs(Interaction.actions) do Interaction.actionLabels[option[1]] = option[2] end
 
 function Interaction:Active()
+    -- A carried item needs the normal drop click, even while marking mode is on.
     if not A.CanAct() or GetCursorInfo() then return false end
     local keys = {}
     if IsAltKeyDown() then keys[#keys + 1] = "ALT" end
     if IsControlKeyDown() then keys[#keys + 1] = "CTRL" end
     if IsShiftKeyDown() then keys[#keys + 1] = "SHIFT" end
     local held = #keys == 0 and "NONE" or table.concat(keys, "-")
+    -- Require an exact chord so extra modifiers remain available to the game.
+    -- Mode adds an unmodified click; it does not remove the configured shortcut.
     return (A.mode and held == "NONE") or A.db.modifier == held
 end
 

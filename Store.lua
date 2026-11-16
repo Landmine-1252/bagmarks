@@ -1,3 +1,6 @@
+-- Account preferences and per-character GUID marks are persisted separately.
+-- observed records the last inventory snapshot; review blocks automation for
+-- a stack whose contents may have changed until the player reapplies a mark.
 local _, A = ...
 local Store = {}
 A.Store = Store
@@ -14,6 +17,7 @@ function Store:Initialize()
     local db = { schema = A.schema }
     for key, default in pairs(A.defaults) do
         local value = account[key]
+        -- A saved false is a choice, not a missing value. Do not use "or default".
         if type(value) == type(default) then db[key] = value else db[key] = default end
     end
     if not ({ Classic = true, Minimal = true, Colorful = true })[db.theme] then db.theme = "Colorful" end
@@ -45,6 +49,7 @@ function Store:Initialize()
 end
 
 function Store:Get(guid)
+    -- No record means Normal; keeping it absent also makes Clear Mark explicit.
     local record = guid and A.char.marks[guid]
     return record and record.state or nil
 end
@@ -52,6 +57,7 @@ end
 function Store:Set(item, state)
     if not A.CanAct() or not item or (state and not A.states[state]) then return false end
     A.char.marks[item.guid] = state and { state = state, itemID = item.itemID } or nil
+    -- An explicit menu/cycle choice acknowledges the current stack contents.
     A.char.review[item.guid] = nil
     A.char.observed[item.guid] = { itemID = item.itemID, count = item.count, bag = item.bag }
     self:RefreshInventory()
@@ -73,6 +79,8 @@ function Store:Reconcile(items, scope)
     end
     for guid, item in pairs(items) do
         local old = previous[guid]
+        -- Matching item IDs only raise a review flag here. They never copy a
+        -- Locked/Junk/Mail mark from one GUID to another.
         -- Also quarantine marked stacks that grew while their source was not observable.
         if (not old or item.count > old.count) and (diminished[item.itemID] or (old and self:Get(guid))) then
             A.char.review[guid] = true
@@ -80,6 +88,7 @@ function Store:Reconcile(items, scope)
     end
     local nextObserved = {}
     for guid, old in pairs(previous) do
+        -- Keep observations for inaccessible bags; closing a bank is not a loss.
         if not scope[old.bag] then nextObserved[guid] = old end
     end
     for guid, item in pairs(items) do

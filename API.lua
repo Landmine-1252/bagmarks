@@ -1,3 +1,5 @@
+-- Client API boundary: turn readable live slots into item records. Callers
+-- track the GUID; bag/slot coordinates are only the item's current location.
 local _, A = ...
 local API = {}
 A.API = API
@@ -24,8 +26,11 @@ function API:Read(bag, slot, forDisplay)
     end
     if type(info.itemID) ~= "number" or type(info.stackCount) ~= "number" or info.stackCount < 1 then return end
     local location = self:Location(bag, slot)
+    -- An item ID identifies a type shared by many copies. Only a GUID can
+    -- carry one selected copy's mark safely through sorting and movement.
     local guidOK, guid = pcall(C_Item.GetItemGUID, location)
     if not guidOK or not A.Safe(guid) or type(guid) ~= "string" or not guid:match("^Item%-") then return end
+    -- Treat an unknown native busy flag as busy, so helpers do not act on it.
     return {
         guid = guid, bag = bag, slot = slot, location = location,
         itemID = info.itemID, count = info.stackCount, link = info.hyperlink,
@@ -60,6 +65,8 @@ function API:BagIDs(includeBank)
 end
 
 function API:Scan(includeBank)
+    -- Return both the found GUIDs and the bags we could inspect. Store uses
+    -- scope to distinguish a missing item from a bank that is merely closed.
     local items, scope = {}, {}
     if not self.available or A.InCombat() then return items, scope end
     for _, bag in ipairs(self:BagIDs(includeBank)) do
@@ -76,6 +83,8 @@ function API:Scan(includeBank)
 end
 
 function API:Find(guid, includeBank)
+    -- Menus and queues can outlive a bag sort. Resolve the GUID again instead
+    -- of trusting the location captured when the user started the action.
     local items = self:Scan(includeBank)
     return items[guid]
 end
@@ -97,6 +106,7 @@ function API:IsReusable(location)
     return consumableOK and A.Safe(consumable) and consumable == false
 end
 
+-- Unknown quest/refund status excludes an item from automated sale or mail.
 function API:IsQuest(item)
     if not C_Container.GetContainerItemQuestInfo then return true end
     local ok, info = pcall(C_Container.GetContainerItemQuestInfo, item.bag, item.slot)
@@ -113,6 +123,8 @@ end
 
 function API:SellPrice(item)
     if item.noValue ~= false or not C_Item.GetItemInfo then return end
+    -- The eleventh return is the unit vendor price in copper. Sale previews
+    -- multiply it by stack count; the queue also checks it again before selling.
     local ok, name, _, _, _, _, _, _, _, _, _, price = pcall(C_Item.GetItemInfo, item.link or item.itemID)
     if ok and A.Safe(name) and A.Safe(price) and name and type(price) == "number" and price > 0 then
         return price
@@ -129,6 +141,8 @@ function API:CanMail(item)
 end
 
 function API:MerchantReady()
+    -- UseContainerItem sells only in the intended merchant context. The Buy
+    -- tab and empty cursor prevent this queue from becoming a different action.
     return A.CanAct() and A.merchantOpen and MerchantFrame and MerchantFrame:IsShown()
         and MerchantFrame.selectedTab == 1 and not GetCursorInfo()
         and not (SpellIsTargeting and SpellIsTargeting())

@@ -31,6 +31,8 @@ def find_tag(repository, tag, api):
     refs = api(f"repos/{repository}/git/matching-refs/tags/{tag}")
     if not isinstance(refs, list) or any(not isinstance(ref, dict) for ref in refs):
         raise ValueError("Could not verify the existing GitHub tags")
+    # matching-refs is a prefix search: asking for 1.0.1 can also return 1.0.10.
+    # Require the full ref before treating a tag as existing.
     matches = [ref for ref in refs if ref.get("ref") == target]
     if len(matches) > 1:
         raise ValueError("Ambiguous release tag")
@@ -38,6 +40,8 @@ def find_tag(repository, tag, api):
 
 
 def tag_commit(repository, ref, api):
+    # Lightweight tags point straight to a commit; annotated tags point to tag
+    # objects. Follow the chain with cycle/depth limits before comparing SHAs.
     obj = ref.get("object")
     seen = set()
     for _ in range(10):

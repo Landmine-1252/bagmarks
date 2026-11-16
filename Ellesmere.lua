@@ -1,3 +1,5 @@
+-- Translate Ellesmere's rendered slots and combined-stack views into the same
+-- per-GUID item records used by Blizzard bags. Display grouping is not identity.
 local _, A = ...
 local Ellesmere = { slots = {} }
 A.Ellesmere = Ellesmere
@@ -26,6 +28,8 @@ function Ellesmere:Paint(button, data)
             end
         end
     end
+    -- Replace the record even for an empty/invalid render. Keeping an older
+    -- record would leave a recycled row pointing at the previous item.
     self.slots[button] = shown
     if A.InCombat() then
         if A.Bags.overlays[button] then A.Bags:Update(button) end
@@ -84,6 +88,8 @@ function Ellesmere:GroupState(button, item)
     end
     -- Never paint a whole group Locked because just one of its GUIDs is locked.
     if total ~= self.slots[button].total then same = false end
+    -- The uniform display mark and presence of any Locked member are separate:
+    -- a mixed group may need a click guard without showing a whole-group lock.
     return same and state or nil, hasLocked, #items, not same
 end
 

@@ -1,3 +1,5 @@
+-- Native holds and transfer checks are best-effort client safeguards. A saved
+-- Locked mark is persistent intent; held tracks this session's native holds.
 local _, A = ...
 local Protection = { held = {} }
 A.Protection = Protection
@@ -7,6 +9,8 @@ local function guid(value)
 end
 
 local function read(fn, ...)
+    -- Optional APIs may be missing, throw, or return restricted data. Return
+    -- only readable results; nil remains distinct from an explicit true/false.
     if type(fn) ~= "function" then return end
     local ok, value = pcall(fn, ...)
     if ok and A.Safe(value) then return value end
@@ -30,6 +34,8 @@ function Protection:ReturnCursor(requested, deleting)
     if self.returning or not A.IsEnabled() then return false end
     requested = guid(requested)
     local current = self:CursorGUID()
+    -- A deletion event can refer to an older cursor item. Never clear a different
+    -- item just because the event's GUID was marked Locked.
     if requested and current and requested ~= current then
         if A.Store:Get(requested) == "locked" then A.Print("Locked item: cancel this deletion. The cursor no longer matches.") end
         return false
@@ -40,6 +46,7 @@ function Protection:ReturnCursor(requested, deleting)
         if deleting then A.Print("Locked item: cancel this deletion. This path does not use the cursor.") end
         return false
     end
+    -- Clearing the cursor may immediately emit CURSOR_CHANGED and reenter us.
     self.returning = true
     local ok = type(ClearCursor) == "function" and pcall(ClearCursor)
     self.returning = false
@@ -60,6 +67,8 @@ function Protection:Release(guidToRelease)
     -- The client has no ownership token. Never unlock an item that was already
     -- held when BagMarks inspected it; release only our successful acquisitions.
     if C_Item and type(C_Item.UnlockItemByGUID) == "function" then
+        -- Remove our record before any synchronous unlock event. A successful
+        -- pcall proves only that Lua did not throw, not that the hold was released.
         self.held[guidToRelease] = nil
         local ok = pcall(C_Item.UnlockItemByGUID, guidToRelease)
         if not ok then self.held[guidToRelease] = true end
@@ -78,6 +87,8 @@ function Protection:RiskyContext()
 end
 
 function Protection:SyncHolds()
+    -- Lock/unlock calls can emit ITEM_LOCK_CHANGED before they return. This
+    -- guard prevents nested synchronization from acquiring/releasing twice.
     if self.syncing then return end
     self.syncing = true
     local enabled = A.IsEnabled() and not self.stopping
@@ -125,6 +136,8 @@ end
 
 function Protection:CheckTrade()
     if self.checkingTrade or not A.IsEnabled() or not A.tradeOpen or not C_TooltipInfo then return end
+    -- Inspect outgoing slots, including the enchant slot. Cancellation is a
+    -- request to the client, not proof that a trade has already been prevented.
     for slot = 1, (MAX_TRADE_ITEMS or 7) do
         local itemGUID = self:TooltipGUID(C_TooltipInfo.GetTradePlayerItem, slot)
         if itemGUID and A.Store:Get(itemGUID) == "locked" then
@@ -150,8 +163,8 @@ function Protection:CheckMail()
             if itemGUID and A.Store:Get(itemGUID) == "locked" then slot = index; break end
         end
         if slot then
-            -- This is the native attachment's right-click removal path. A failed
-            -- or still-pending removal closes the mailbox before a user can send.
+            -- Use the native attachment's right-click removal path. If it fails
+            -- or is still pending, request mailbox closure and warn the player.
             local ok = type(ClickSendMailItemButton) == "function" and pcall(ClickSendMailItemButton, slot, true)
             if ok and read(HasSendMailItem, slot) == false then
                 A.Print("Locked attachment removed. Clear its mark before mailing it.")
@@ -195,6 +208,8 @@ end
 
 function Protection:QueueBuybackCheck()
     if self.buybackTimer then return end
+    -- Clearing this ticket on merchant close invalidates an already queued
+    -- timer, so a callback from an old visit cannot restore items in a new one.
     local ticket = {}
     self.buybackTimer = ticket
     C_Timer.After(.1, function()
@@ -221,6 +236,8 @@ function Protection:CheckBuyback()
     if not self.historicalBuyback then self.historicalBuyback = items; return end
     local pending = self.buybackPending
     if pending then
+        -- A disappearing buyback row alone is not success. Verify that the same
+        -- GUID is now accessible to the player before reporting its return.
         local location = not items[pending.guid] and C_Item and read(C_Item.GetItemLocation, pending.guid)
         local returned = location and read(C_Item.DoesItemExist, location) == true
             and guid(read(C_Item.GetItemGUID, location)) == pending.guid
@@ -255,6 +272,8 @@ function Protection:CheckBuyback()
                 ok, price = success, value
             end
             local money = read(GetMoney)
+            -- Buyback indexes shift after purchases. Recheck the GUID at the
+            -- chosen index immediately before spending the verified amount.
             if ok and A.Safe(price) and type(price) == "number" and price >= 0
                 and type(money) == "number" and money >= price and type(BuybackItem) == "function"
                 and self:TooltipGUID(C_TooltipInfo.GetBuybackItem, index) == itemGUID then
@@ -295,6 +314,7 @@ function Protection:Refresh()
 end
 
 function Protection:Stop()
+    -- Logout releases our native holds while keeping saved marks for next login.
     self.stopping = true
     self:MerchantClosed()
     self:SyncHolds()

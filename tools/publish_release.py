@@ -55,6 +55,8 @@ def matching_asset(release, name):
 
 
 def verify_asset(repository, asset, content, download):
+    # Equal names and sizes do not establish equal builds. Verify the digest so
+    # a rerun can reuse an asset without deleting or silently replacing it.
     if asset.get("state") != "uploaded" or asset.get("size") != len(content):
         raise ValueError("Existing addon ZIP is incomplete or differs from this build; it was not replaced")
     digest = asset.get("digest")
@@ -70,6 +72,8 @@ def verify_asset(repository, asset, content, download):
 
 def publish_release(repository, tag, commit, archive, notes, create_tag=False,
                     api=github_api, run=run_gh, download=download_asset):
+    # Injectable API/CLI/download functions let the tests model real release
+    # states and interrupted retries without writing anything to GitHub.
     archive, notes = Path(archive).resolve(), Path(notes).resolve()
     if archive.name != f"BagMarks-{tag}.zip":
         raise ValueError("The addon ZIP filename must match the release tag")
@@ -81,8 +85,12 @@ def publish_release(repository, tag, commit, archive, notes, create_tag=False,
     if not notes.read_text(encoding="utf-8").strip():
         raise ValueError("Release notes must not be empty")
     content = archive.read_bytes()
+    # Validate local files first, then require the remote tag to identify the
+    # tested commit. A matching version string alone does not prove provenance.
     ensure_tag(repository, tag, commit, create=create_tag, api=api)
     release = find_release(repository, tag, api)
+    # A release created in GitHub's web UI may already exist without our ZIP.
+    # Preserve its title/notes and finish only the missing publication steps.
     if release is None:
         # Create a draft first so all assets are verified before publication,
         # including on repositories with immutable releases enabled.

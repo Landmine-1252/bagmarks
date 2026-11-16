@@ -1,3 +1,5 @@
+-- Blizzard owns saved keybindings; SavedVariables does not duplicate them.
+-- history is a session-only, per-action undo record for our settings controls.
 local _, A = ...
 local Bindings = { action = "BAGMARKS_TOGGLE_MODE", hoverAction = "BAGMARKS_CYCLE_HOVERED", history = {} }
 A.Bindings = Bindings
@@ -5,6 +7,8 @@ BINDING_HEADER_BAGMARKS = "BagMarks"
 BINDING_NAME_BAGMARKS_TOGGLE_MODE = "Toggle Item Marking Mode"
 BINDING_NAME_BAGMARKS_CYCLE_HOVERED = "Cycle hovered item's mark"
 
+-- Named entry points called by Bindings.xml. Defining actions does not assign
+-- keys, so both commands remain unbound until the player chooses a shortcut.
 function BagMarks_ToggleMarkingMode()
     if A.ready then A.ToggleMode() end
 end
@@ -29,6 +33,8 @@ function Bindings:Apply(keys, restoring, action)
     if A.InCombat() then return false, "Keybindings cannot change during combat." end
     local set = GetCurrentBindingSet()
     for _, key in ipairs(keys) do
+        -- Check normal and temporary override bindings separately. An override
+        -- can hide a normal assignment that must not be silently replaced.
         for _, overrides in ipairs({ false, true }) do
             local existing = GetBindingAction(key, overrides)
             if existing and existing ~= "" and existing ~= action then
@@ -37,6 +43,8 @@ function Bindings:Apply(keys, restoring, action)
         end
     end
     local previous = self:Keys(action)
+    -- SetBinding is not transactional. Restore the earlier keys if any clear
+    -- or assignment fails, and persist only after the whole change succeeds.
     local function restoreOld()
         for _, key in ipairs(self:Keys(action)) do SetBinding(key) end
         for _, key in ipairs(previous) do SetBinding(key, action) end
@@ -56,6 +64,8 @@ end
 function Bindings:Restore(action)
     action = action or self.action
     local previous = self.history[action]
+    -- Account and character binding sets can differ. An undo from one must not
+    -- overwrite the other after the player changes the active set.
     if previous and previous.set ~= GetCurrentBindingSet() then
         return false, "The active binding set changed. Switch back before restoring."
     end
@@ -78,9 +88,13 @@ function Bindings:StartCapture(action)
         local frame = CreateFrame("Frame", nil, UIParent)
         frame:SetFrameStrata("FULLSCREEN_DIALOG")
         frame:EnableKeyboard(true)
+        -- Consume keys only while capture is shown, avoiding gameplay actions
+        -- or text entry while the player is choosing a replacement shortcut.
         frame:SetPropagateKeyboardInput(false)
         frame:SetScript("OnKeyDown", function(_, key)
             if key == "ESCAPE" then self:StopCapture(); return end
+            -- Wait for a nonmodifier key to complete the chord; pressing Ctrl
+            -- or Shift alone must not finish capture prematurely.
             if key == "LALT" or key == "RALT" or key == "LCTRL" or key == "RCTRL"
                 or key == "LSHIFT" or key == "RSHIFT" or key == "LMETA" or key == "RMETA" then return end
             local chord

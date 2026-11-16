@@ -1,8 +1,11 @@
+-- The hover key cycles one readable item independently of mouse marking mode.
+-- The passive pointer badge describes mode-based mouse clicks only.
 local _, A = ...
 local Hover = {}
 A.Hover = Hover
 
 function Hover:Available()
+    -- Never reinterpret a typing key, drag/drop, or spell target as a mark.
     return A.CanAct() and not GetCursorInfo()
         and not (GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus())
         and not (A.Bindings.capture and A.Bindings.capture:IsShown())
@@ -16,6 +19,7 @@ function Hover:Item()
     -- Resolve only the foreground focus and its ancestors. Never use a stale
     -- tooltip or search behind a menu/window for an item to change.
     local focus = foci[1]
+    -- Bound the parent walk so an unexpected addon frame hierarchy cannot loop.
     for _ = 1, 16 do
         if not A.Safe(focus) or not focus or (focus.IsForbidden and focus:IsForbidden()) then return end
         if not focus.IsVisible or not focus:IsVisible() then return end
@@ -43,6 +47,7 @@ end
 function Hover:Position()
     local x, y = GetCursorPosition()
     if not A.Safe(x) or not A.Safe(y) then self.badge:Hide(); return end
+    -- Cursor coordinates are screen pixels; anchors use scaled UI coordinates.
     local scale = UIParent:GetEffectiveScale()
     self.badge:ClearAllPoints()
     self.badge:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale + 18, y / scale - 18)
@@ -85,6 +90,8 @@ function Hover:Create()
     driver:SetScript("OnUpdate", function(_, delta)
         if not A.mode or not A.CanAct() then self:Refresh(); return end
         elapsed = elapsed + delta
+        -- Follow the pointer each frame, but limit this ticker's identity checks
+        -- to ten per second. Key presses always perform their own fresh read.
         if elapsed >= .1 then elapsed = 0; self:Update()
         elseif badge:IsShown() then self:Position() end
     end)
@@ -94,6 +101,8 @@ function Hover:Refresh()
     if not self.driver then self:Create() end
     if not self.driver then return end
     local active = A.mode and A.CanAct()
+    -- Hidden frames do not receive OnUpdate, so ordinary play pays no polling
+    -- cost for the badge while marking mode is off.
     self.driver:SetShown(active and true or false)
     if active then self:Update() else self.badge:Hide() end
 end

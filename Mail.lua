@@ -1,3 +1,5 @@
+-- Recipient autofill is scoped to one compose session. It never sends mail;
+-- attachment processing lives in Operations.lua and Send remains a user action.
 local _, A = ...
 local Mail = { generation = 0 }
 A.Mail = Mail
@@ -18,6 +20,8 @@ end
 
 function Mail:QueueFill()
     if self.pending then return end
+    -- The token deduplicates this request; the generation distinguishes drafts.
+    -- Closing or successfully sending mail makes earlier callbacks stale.
     local token, generation = {}, self.generation
     self.pending = token
     -- Run after Blizzard's tab/reset/reply handlers and preserve any name they set.
@@ -44,6 +48,8 @@ function Mail:InstallHooks()
     self.hooked = true
     SendMailFrame:HookScript("OnShow", function() self:QueueFill() end)
     SendMailNameEditBox:HookScript("OnTextChanged", function(_, userInput)
+        -- Even deliberately clearing the field counts as an edit. Do not refill
+        -- it later in the same draft; programmatic SetText is not a user edit.
         if userInput then self.touched = true end
     end)
     self:QueueFill()

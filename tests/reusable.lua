@@ -188,10 +188,10 @@ return function(M, A, test, eq, mark)
             local labelled
             for _, line in ipairs(GameTooltip.lines) do if line:find("Reusable:", 1, true) then labelled = true end end
             assert(labelled, "tooltip must explain usable Locked items")
-            M.alt = true; event("MODIFIER_STATE_CHANGED")
+            M.ctrl, M.shift = true, true; event("MODIFIER_STATE_CHANGED")
             eq(passesRight(), false)
             overlay:Fire("OnClick", "RightButton"); assert(M.menu); eq(#M.used, 1)
-            M.alt = false; event("MODIFIER_STATE_CHANGED"); assert(passesRight())
+            M.ctrl, M.shift = false, false; event("MODIFIER_STATE_CHANGED"); assert(passesRight())
             event("TRADE_SHOW"); eq(passesRight(), false); eq(item.held, true)
             event("TRADE_CLOSED"); assert(passesRight()); eq(item.held, nil)
             eq(button.scripts.OnClick, nativeClick); eq(A.Store:Get(item.guid), "locked")

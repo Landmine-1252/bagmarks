@@ -2,7 +2,7 @@
 ## Title: BagMarks
 ## Notes: Small, per-item Locked, Junk, and Mail marks for Blizzard and Ellesmere bags.
 ## Author: BagMarks contributors
-## Version: 1.0.1
+## Version: 1.0.2
 ## SavedVariables: BagMarksDB
 ## SavedVariablesPerCharacter: BagMarksCharDB
 ## OptionalDeps: EllesmereUIBags
@@ -20,6 +20,7 @@ Themes.lua
 UI.lua
 Bags.lua
 Ellesmere.lua
+Hover.lua
 Mail.lua
 Operations.lua
 Bindings.lua

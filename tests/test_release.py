@@ -48,7 +48,7 @@ class ReleaseMetadataTests(unittest.TestCase):
             release.read_release(self.root, "1.0.0")
 
     def test_readme_content_does_not_supply_release_metadata(self):
-        for text in ("# BagMarks\n\nAlt + Right Click an item.\n",
+        for text in ("# BagMarks\n\nCtrl + Shift + Right Click an item.\n",
                      "# BagMarks\n\n**Version 0.9.0**\n",
                      "# BagMarks\n\nSee the changelog for versions 0.9.0 and 1.0.0.\n"):
             with self.subTest(text=text):

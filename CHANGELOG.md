@@ -1,5 +1,24 @@
 # BagMarks Changelog
 
+## 1.0.2 - Hover marking and clearer controls
+
+### Added
+
+- Mark by hovering over an item and pressing a configurable key. Cycle **Normal → Locked → Junk → Mail → Normal**, with Locked first. Choose **Cycle hovered item** in Marking settings to assign a key; it starts unbound and preserves existing shortcuts.
+- Show a small **Marking** badge beside the pointer over supported bag items while Item Marking Mode is active.
+
+### Changed
+
+- Use **Ctrl + Shift + Right Click** as the default marking shortcut for new installs and settings resets, keeping Alt available for other addons. Existing saved shortcuts are preserved; change them in Marking settings to use the new default.
+- Use Blizzard-style **General**, **Marking**, and **Appearance** tabs with a distinct selected tab.
+- Show a clear **Item Marking Mode: ON/OFF** status, current controls, and an explicit on/off button in the settings footer.
+- Configure the hover key and mode-toggle key separately, with independent Clear and Restore controls.
+- Explain the new controls in the player guide. Hover marking still asks for an individual stack in Ellesmere's combined views and for review after stack changes.
+
+### Validation
+
+- Offline regression tests cover hover identity, binding conflicts, settings tabs, and mode indicators. Native cursor routing, keyboard behavior, tab rendering, and combat taint still need in-game verification in WoW Forever.
+
 ## 1.0.1 - Combat icons and safer marking
 
 ### Fixed

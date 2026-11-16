@@ -41,14 +41,20 @@ function Interaction:Hint()
     return modifier .. mouse .. ": " .. action
 end
 
-function Interaction:Mark(owner, item)
+function Interaction:Cycle(owner, item)
     if not A.CanAct() or not item then return end
     -- A changed stack deserves an explicit choice even when cycling is enabled.
-    if A.db.markingAction == "menu" or A.char.review[item.guid] then
+    if A.char.review[item.guid] then
         A.UI:ItemMenu(owner, item)
         return
     end
     -- Match the menu order: the first marking click protects an unmarked item.
     local nextState = { normal = "locked", locked = "junk", junk = "mail", mail = false }
     A.Store:Set(item, nextState[A.Store:Get(item.guid) or "normal"] or nil)
+end
+
+function Interaction:Mark(owner, item)
+    if not A.CanAct() or not item then return end
+    if A.db.markingAction == "menu" then A.UI:ItemMenu(owner, item)
+    else self:Cycle(owner, item) end
 end

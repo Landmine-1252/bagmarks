@@ -1,11 +1,11 @@
 local addonName, A = ...
 A.name = addonName
-A.version = "1.0.1"
+A.version = "1.0.2"
 A.schema = 2
 A.states = { locked = "Locked", junk = "Junk", mail = "Mail" }
 A.defaults = {
     enabled = true, minimap = true, tooltips = true, overlays = true,
-    modifier = "ALT", mouseButton = "RightButton", markingAction = "menu",
+    modifier = "CTRL-SHIFT", mouseButton = "RightButton", markingAction = "menu",
     recipient = "", autoFillRecipient = true, autoSellJunk = false, theme = "Colorful", angle = 220,
 }
 A.mode = false -- Intentionally session-only, to avoid surprising right clicks after login.
@@ -37,6 +37,7 @@ function A.Refresh()
     A.Protection:Refresh()
     A.Bags:Discover()
     A.Bags:Refresh()
+    A.Hover:Refresh()
     A.Minimap:Refresh()
     A.Settings:Refresh()
     A.Operations:RefreshButtons()

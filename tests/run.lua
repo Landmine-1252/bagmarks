@@ -47,7 +47,8 @@ local function paintEllesmere(button, total)
 end
 
 test("clean login, defaults and Blizzard settings registration", function()
-    eq(A.db.theme, "Colorful"); eq(A.db.modifier, "ALT"); eq(A.Bindings:Text(), "Unbound")
+    eq(A.db.theme, "Colorful"); eq(A.db.modifier, "CTRL-SHIFT"); eq(A.Bindings:Text(), "Unbound")
+    eq(A.Interaction:Hint(), "Ctrl + Shift + Right Click: Open mark menu")
     eq(A.mode, false); eq(M.category.name, "BagMarks")
     eq(SLASH_BAGMARKS1, "/bagmarks"); eq(SLASH_BAGMARKS2, "/bm")
 end)
@@ -164,7 +165,7 @@ test("Ellesmere painter discovers items outside Blizzard container pools", funct
     local nativeClick = button.scripts.OnClick
     eui.RunItemOverlays(button, { bag = 0, slot = 1, info = { itemID = item.itemID }, itemLink = item.link })
     eq(#M.containers, 0)
-    M.alt = true; A.eventFrame:Fire("OnEvent", "MODIFIER_STATE_CHANGED")
+    M.ctrl, M.shift = true, true; A.eventFrame:Fire("OnEvent", "MODIFIER_STATE_CHANGED")
     local overlay = assert(A.Bags.overlays[button], "Ellesmere item must get a marking overlay")
     assert(overlay:IsVisible()); eq(overlay:GetParent(), button._textOverlay)
     overlay:Fire("OnClick", "RightButton")
@@ -195,7 +196,7 @@ test("Ellesmere copies reused paint data and clears placeholder slots", function
     eq(A.Bags:Read(one).guid, "Item-A"); eq(A.Bags:Read(two).guid, "Item-B")
     data.bag, data.slot, data.info = 0, 0, nil
     eui.RunItemOverlays(one, data)
-    M.alt = true; A.Bags:Refresh()
+    M.ctrl, M.shift = true, true; A.Bags:Refresh()
     eq(A.Bags:Read(one), nil); eq(A.Bags.overlays[one]:IsShown(), false)
     eq(A.Bags:Read(two).guid, "Item-B"); assert(A.Bags.overlays[two].icon:IsShown())
 end)
@@ -295,7 +296,7 @@ test("Ellesmere grouped clicks choose a GUID even with cycle mode enabled", func
     M.item("Item-A", 0, 1, { count = 5 }); M.item("Item-B", 0, 2, { count = 7 })
     A.Store:RefreshInventory()
     local button = M.ellesmereButton(0, 1); paintEllesmere(button, 12)
-    A.SetOption("markingAction", "cycle"); M.alt = true; A.Bags:Refresh()
+    A.SetOption("markingAction", "cycle"); M.ctrl, M.shift = true, true; A.Bags:Refresh()
     local overlay = A.Bags.overlays[button]
     overlay:Fire("OnClick", "RightButton")
     eq(A.Store:Get("Item-A"), nil); eq(#M.menu.children, 2)
@@ -316,7 +317,7 @@ test("Ellesmere grouped choices follow moved GUIDs and exclude variants and bank
     variant.link = "|Hitem:100:variant|h[Variant]|h"
     M.item("Item-Bank", 6, 1); A.bankOpen = true; A.Store:RefreshInventory()
     local button = M.ellesmereButton(0, 1); paintEllesmere(button, 2)
-    M.alt = true; A.Bags:Refresh(); A.Bags.overlays[button]:Fire("OnClick", "RightButton")
+    M.ctrl, M.shift = true, true; A.Bags:Refresh(); A.Bags.overlays[button]:Fire("OnClick", "RightButton")
     eq(#M.menu.children, 2)
     M.bags[0][3], M.bags[0][1] = one, nil
     M.item("Item-Replacement", 0, 1)
@@ -344,11 +345,11 @@ test("Ellesmere selected marks feed sale and mail helpers without Locked copies"
     for i = 1, 3 do M.item("Item-" .. i, 0, i) end
     A.Store:RefreshInventory()
     local button = M.ellesmereButton(0, 1); paintEllesmere(button, 3)
-    M.alt = true; A.Bags:Refresh(); A.Bags.overlays[button]:Fire("OnClick", "RightButton")
+    M.ctrl, M.shift = true, true; A.Bags:Refresh(); A.Bags.overlays[button]:Fire("OnClick", "RightButton")
     M.menu.children[1].choices[2].callback()
     M.menu.children[2].choices[1].callback()
     M.menu.children[3].choices[3].callback()
-    M.alt = false; merchant(); A.Operations:PreviewJunk(); confirm(); M.tick(1)
+    M.ctrl, M.shift = false, false; merchant(); A.Operations:PreviewJunk(); confirm(); M.tick(1)
     eq(#M.sold, 1); eq(M.sold[1], "Item-1")
     A.merchantOpen = false; MerchantFrame:Hide(); mail(); A.Operations:AttachMail(); M.tick(1)
     eq(M.attachments[1].guid, "Item-3"); eq(M.bags[0][2].guid, "Item-2")
@@ -363,7 +364,7 @@ test("Ellesmere grouped menus scroll and unchanged discovery does not poll GUIDs
     local reads = M.reads
     for _ = 1, 20 do A.Bags:Discover() end
     eq(M.reads, reads)
-    M.alt = true; A.Bags:Refresh(); A.Bags.overlays[button]:Fire("OnClick", "RightButton")
+    M.ctrl, M.shift = true, true; A.Bags:Refresh(); A.Bags.overlays[button]:Fire("OnClick", "RightButton")
     eq(#M.menu.children, 12); eq(M.menu.scrollHeight, 300)
 end)
 
@@ -382,10 +383,18 @@ test("modifier and mode capture only intended clicks, with immediate restoration
     local button = M.button(0, 1); A.Bags:Discover()
     local overlay = A.Bags.overlays[button]
     eq(overlay:IsShown(), false)
-    M.alt = true; A.Bags:Refresh()
+    for _, keys in ipairs({ { true, false, false }, { false, true, false }, { false, false, true }, { true, true, true } }) do
+        M.alt, M.ctrl, M.shift = unpack(keys)
+        A.Bags:Refresh()
+        eq(A.Interaction:Matches("RightButton"), false)
+        eq(contains(overlay.passthrough, "RightButton"), true)
+        overlay:Fire("OnClick", "RightButton"); eq(M.menu, nil)
+    end
+    M.alt = false
+    M.ctrl, M.shift = true, true; A.Bags:Refresh()
     eq(contains(overlay.passthrough, "LeftButton"), true); eq(contains(overlay.passthrough, "RightButton"), false)
-    M.shift = true; A.Bags:Refresh(); eq(contains(overlay.passthrough, "RightButton"), true)
-    M.alt, M.shift = false, false; A.ToggleMode(); eq(contains(overlay.passthrough, "RightButton"), false)
+    M.alt = true; A.Bags:Refresh(); eq(contains(overlay.passthrough, "RightButton"), true)
+    M.alt, M.ctrl, M.shift = false, false, false; A.ToggleMode(); eq(contains(overlay.passthrough, "RightButton"), false)
     A.ToggleMode(); eq(contains(overlay.passthrough, "RightButton"), true)
     A.SetOption("modifier", "CTRL"); M.ctrl = true; A.Bags:Refresh()
     eq(contains(overlay.passthrough, "RightButton"), false)
@@ -393,7 +402,7 @@ end)
 
 test("context selection follows GUID instead of a stale menu slot", function()
     local item = M.item("Item-A", 0, 1)
-    local button = M.button(0, 1); A.Bags:Discover(); M.alt = true
+    local button = M.button(0, 1); A.Bags:Discover(); M.ctrl, M.shift = true, true
     local overlay = A.Bags.overlays[button]
     A.Bags:Click(overlay, "RightButton")
     eq(M.menu.owner, button, "menu must survive release of the modifier")
@@ -592,9 +601,13 @@ end)
 
 test("disabled addon and reset preserve marks and existing bindings", function()
     mark("Item-A", 0, 1, "locked"); A.db.theme = "Minimal"; A.Bindings:Apply({ "F8" })
+    A.db.modifier, A.db.mouseButton = "ALT", "MiddleButton"
     A.SetOption("enabled", false); eq(A.CanAct(), false)
-    A.Slash("reset"); eq(A.db.theme, "Minimal"); confirm()
+    A.Slash("reset"); eq(A.db.theme, "Minimal"); eq(A.db.modifier, "ALT")
+    assert(A.UI.confirm.body:GetText():find("Default shortcut: Ctrl + Shift + Right Click", 1, true))
+    confirm()
     eq(A.db.theme, "Colorful"); eq(A.Store:Get("Item-A"), "locked"); eq(M.bindings.F8, A.Bindings.action)
+    eq(A.db.modifier, "CTRL-SHIFT"); eq(A.db.mouseButton, "RightButton")
 end)
 
 test("idle visible-bag discovery avoids repeated GUID queries", function()
@@ -622,7 +635,18 @@ test("new options persist and invalid input preferences recover safely", functio
     eq(A.db.autoFillRecipient, false)
     A.db.modifier, A.db.mouseButton, A.db.markingAction = "invalid", "invalid", "invalid"
     A.Store:Initialize()
-    eq(A.db.modifier, "ALT"); eq(A.db.mouseButton, "RightButton"); eq(A.db.markingAction, "menu")
+    eq(A.db.modifier, "CTRL-SHIFT"); eq(A.db.mouseButton, "RightButton"); eq(A.db.markingAction, "menu")
+end)
+
+test("upgrading preserves the player's saved Alt shortcut", function()
+    BagMarksDB = { schema = 2, modifier = "ALT", mouseButton = "RightButton", markingAction = "menu" }
+    A.Store:Initialize()
+    eq(A.db.modifier, "ALT")
+    A.Settings:Refresh(); eq(A.Settings.modifier:GetText(), "Alt")
+    M.item("Item-A", 0, 1); local button = M.button(0, 1); A.Bags:Discover()
+    M.alt = true; A.Bags:Refresh()
+    A.Bags.overlays[button]:Fire("OnClick", "RightButton"); eq(M.menu.owner, button)
+    eq(A.Interaction:Hint(), "Alt + Right Click: Open mark menu")
 end)
 
 test("each mouse button captures only its selected exact modifier chord", function()
@@ -670,7 +694,7 @@ test("cycling locks first and rotates the selected instance through all marks", 
     M.item("Item-B", 0, 2)
     local button = M.button(0, 1)
     A.SetOption("mouseButton", "Button4"); A.SetOption("markingAction", "cycle")
-    M.alt = true; A.Bags:Refresh(); local overlay = A.Bags.overlays[button]
+    M.ctrl, M.shift = true, true; A.Bags:Refresh(); local overlay = A.Bags.overlays[button]
     M.menu = nil
     for _, state in ipairs({ "locked", "junk", "mail", false }) do
         overlay:Fire("OnClick", "Button4")
@@ -687,7 +711,7 @@ test("cycling a changed stack opens a review menu without changing its state", f
     local item = mark("Item-A", 0, 1, "locked", { count = 5 })
     item.count = 7; A.Store:RefreshInventory(); eq(A.char.review["Item-A"], true)
     local button = M.button(0, 1)
-    A.SetOption("markingAction", "cycle"); M.alt = true; A.Bags:Refresh()
+    A.SetOption("markingAction", "cycle"); M.ctrl, M.shift = true, true; A.Bags:Refresh()
     A.Bags.overlays[button]:Fire("OnClick", "RightButton")
     eq(A.Store:Get("Item-A"), "locked"); eq(A.char.review["Item-A"], true)
     assert(M.menu); M.menu.choices[1].callback(); eq(A.char.review["Item-A"], nil)
@@ -697,10 +721,12 @@ test("custom marking buttons do not remove the Locked item guards", function()
     merchant(); mark("Item-A", 0, 1, "locked")
     local button = M.button(0, 1)
     A.SetOption("mouseButton", "MiddleButton"); A.SetOption("markingAction", "cycle")
-    M.alt = true; A.Bags:Refresh(); local overlay = A.Bags.overlays[button]
+    A.Bags:Refresh(); local overlay = A.Bags.overlays[button]
     eq(contains(overlay.passthrough, "RightButton"), false)
     eq(contains(overlay.passthrough, "LeftButton"), false)
     overlay:Fire("OnClick", "RightButton"); eq(A.Store:Get("Item-A"), "locked")
+    M.ctrl, M.shift = true, true; A.Bags:Refresh()
+    eq(contains(overlay.passthrough, "RightButton"), false)
     overlay:Fire("OnClick", "MiddleButton"); eq(A.Store:Get("Item-A"), "junk")
 end)
 
@@ -872,5 +898,6 @@ dofile("tests/protection.lua")(M, A, test, eq, mark)
 dofile("tests/reusable.lua")(M, A, test, eq, mark)
 dofile("tests/autosell.lua")(M, A, test, eq, mark)
 dofile("tests/combat_icons.lua")(M, A, test, eq, mark)
+dofile("tests/hover.lua")(M, A, test, eq, mark)
 
 print(string.format("%d mocked tests passed under %s. No in-game or taint testing was performed.", passed, _VERSION))

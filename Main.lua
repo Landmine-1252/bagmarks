@@ -23,7 +23,8 @@ function A.Slash(message)
     elseif command == "minimap" then A.SetOption("minimap", not A.db.minimap)
     elseif command == "theme" then A.CycleTheme()
     elseif command == "reset" then
-        A.UI:Confirm("Reset BagMarks settings", "Restore default preferences?\n\nItem marks and Blizzard keybindings will be kept.\n\nDefault theme: Colorful\nDefault modifier: Alt", "Reset settings", function() A.Store:ResetSettings() end)
+        local shortcut = A.Interaction.modifierLabels[A.defaults.modifier] .. " + " .. A.Interaction.buttonLabels[A.defaults.mouseButton]
+        A.UI:Confirm("Reset BagMarks settings", "Restore default preferences?\n\nItem marks and Blizzard keybindings will be kept.\n\nDefault theme: " .. A.defaults.theme .. "\nDefault shortcut: " .. shortcut, "Reset settings", function() A.Store:ResetSettings() end)
     else
         A.Print("/bm or /bagmarks: Settings; /bm mode: Marking mode; /bm minimap: Minimap button; /bm theme: Cycle themes; /bm reset: Reset preferences; /bm help: This reference.")
     end
@@ -38,6 +39,7 @@ local function initialize()
     A.Bags:InstallHooks()
     A.Minimap:Create()
     A.Settings:Create() -- Plain, unprotected window can subsequently open in combat.
+    A.Hover:Create()
     A.Settings:RegisterCategory()
     A.Mail:InstallHooks()
     A.Operations:CreateButtons()
@@ -137,6 +139,7 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         if event ~= "MODIFIER_STATE_CHANGED" then A.Protection:SyncHolds() end
         A.Bags:Refresh()
         A.Operations:RefreshButtons()
+        A.Hover:Refresh()
     elseif event == "UPDATE_BINDINGS" then A.Settings:Refresh()
     elseif event == "UI_ERROR_MESSAGE" then
         if A.Operations.job then A.Operations:Cancel("The client reported an error. Remaining markings were kept.") end

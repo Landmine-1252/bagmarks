@@ -2,4 +2,7 @@
     <Binding name="BAGMARKS_TOGGLE_MODE" header="BAGMARKS">
         BagMarks_ToggleMarkingMode();
     </Binding>
+    <Binding name="BAGMARKS_CYCLE_HOVERED">
+        BagMarks_CycleHoveredItem();
+    </Binding>
 </Bindings>

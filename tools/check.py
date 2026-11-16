@@ -41,9 +41,18 @@ for path in list(root.glob("*.lua")) + list(root.rglob("*.md")):
     assert chr(0x2014) not in path.read_text(), path
 bindings = ET.parse(root / "Bindings.xml").getroot()
 assert bindings.tag == "Bindings"
-binding = bindings.find("Binding")
-assert binding is not None and binding.attrib["name"] == "BAGMARKS_TOGGLE_MODE"
-assert "BagMarks_ToggleMarkingMode();" in binding.text
+registered = {binding.attrib["name"]: binding for binding in bindings.findall("Binding")}
+expected = {"BAGMARKS_TOGGLE_MODE": "BagMarks_ToggleMarkingMode",
+            "BAGMARKS_CYCLE_HOVERED": "BagMarks_CycleHoveredItem"}
+assert len(bindings) == len(registered) == len(expected)
+assert registered.keys() == expected.keys()
+binding_code = (root / "Bindings.lua").read_text()
+for name, callback in expected.items():
+    binding = registered[name]
+    assert f"{callback}();" in binding.text
+    assert f"function {callback}(" in binding_code
+    assert f"BINDING_NAME_{name}" in binding_code
+    assert "key" not in binding.attrib, "Shortcuts must start unbound"
 for name, size in (("Lock", 32), ("Junk", 32), ("Mail", 32), ("BagMarks", 64)):
     data = (root / "Media" / f"{name}.tga").read_bytes()
     width, height, depth = struct.unpack_from("<HHB", data, 12)

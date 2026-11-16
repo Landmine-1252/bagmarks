@@ -8,7 +8,7 @@ Works with Blizzard bags and banks, plus EllesmereUI Bags.
 
 ## Mark your items
 
-Open your bags and **Alt + Right Click** an item to choose a mark:
+Open your bags, hold **Ctrl + Shift**, and **Right Click** an item to choose a mark:
 
 | Mark | Icon | Purpose |
 | --- | --- | --- |
@@ -30,22 +30,26 @@ Type **`/bm`** or **`/bagmarks`**, or **Left Click** the minimap button, to open
 | Tab | What you can change |
 | --- | --- |
 | **General** | Enable BagMarks, show the minimap button, set up automatic junk selling, and configure mail autofill |
-| **Marking** | Choose modifier keys, a mouse button, the click action, and a shortcut for Item Marking Mode |
+| **Marking** | Choose mouse controls, a key to cycle the hovered item, and a key to toggle Item Marking Mode |
 | **Appearance** | Toggle icons and tooltip labels; preview **Classic**, **Minimal**, or **Colorful** themes |
 
 The minimap button, icons, and tooltip labels start on, with **Colorful** selected. Appearance changes apply immediately. **Left-drag** the minimap button to move it.
 
-**Marking controls:** Choose your modifier combination and mouse button in **Marking** if Alt + Right Click conflicts with another addon. **None** needs no modifier; **Marking Mode only** enables marking only while the mode is on.
+**Marking controls:** The default is **Ctrl + Shift + Right Click**. Change the modifier combination and mouse button in **Marking** to suit your setup. **None** needs no modifier; **Marking Mode only** enables marking only while the mode is on.
 
-**Cycle marks:** Set **Marking → Click action → Cycle marks** for Diablo-style marking: **Normal → Locked → Junk → Mail → Normal**. An unmarked item locks first.
+**Upgrading?** Your saved shortcut is kept. To switch to the new default, select **Marking → Modifier keys → Ctrl + Shift** and **Mouse button → Right Click**.
 
-**Keyboard shortcut:** In **Marking**, click **Set Key**, then press a key combination. Escape cancels. **Clear** removes the binding; **Restore** undoes your last binding change this session. It starts **unbound** and won't replace another shortcut.
+**Cycle marks:** Set **Marking → Click action → Cycle marks** to rotate **Normal → Locked → Junk → Mail → Normal** with each marking click. An unmarked item locks first.
+
+**Hover and press a key:** Under **Marking → Keyboard shortcut**, select **Cycle hovered item**, click **Set Key**, and press an unused key or combination. Then point at an item and press that key to cycle its mark. This works with Item Marking Mode off. Combined or changed stacks ask you to choose a stack or mark.
+
+Both **Cycle hovered item** and **Toggle marking mode** start **unbound**. Select either to set its key. Escape cancels capture, **Clear** removes that binding, and **Restore** undoes its last change this session. Existing shortcuts are never replaced. To use **Space**, first move Jump to another key in WoW's Key Bindings. The assigned hover key is reserved for BagMarks even away from items.
 
 ## Mark several items quickly
 
-**Right Click** the minimap button or use **`/bm mode`** to toggle Item Marking Mode. It uses your selected mouse button without a modifier: plain right-click by default.
+**Right Click** the minimap button, use **`/bm mode`**, or use the settings footer to toggle Item Marking Mode. It uses your selected mouse button without a modifier: plain right-click by default.
 
-A blue minimap indicator shows when active. Turn it off to return to your configured shortcut. It starts off and switches off on login, `/reload`, or entering combat.
+The footer shows **ON/OFF** and explains your current controls. A blue minimap indicator and a small **Marking** badge beside the pointer over bag items show when the mode is active. Turn it off to restore your usual clicks. It starts off and switches off on login, `/reload`, or entering combat.
 
 ## Sell marked junk
 

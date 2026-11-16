@@ -4,14 +4,22 @@ local Frame = {}
 Frame.__index = Frame
 
 local function newFrame(kind, name, parent, template)
-    local f = setmetatable({ kind = kind, name = name, parent = parent, shown = true,
+    local f = setmetatable({ kind = kind, name = name, parent = parent, template = template, shown = true,
         scripts = {}, hooks = {}, width = 36, height = 36, level = 1, strata = "MEDIUM", enabled = true }, Frame)
     M.frames[#M.frames + 1] = f
     if name then _G[name] = f end
     if template == "BasicFrameTemplateWithInset" then f.TitleText = newFrame("FontString", nil, f) end
+    if template == "PanelTopTabButtonTemplate" then
+        f.Text = newFrame("FontString", nil, f)
+        for _, part in ipairs({ "Left", "Middle", "Right", "LeftActive", "MiddleActive", "RightActive" }) do
+            f[part] = newFrame("Texture", nil, f)
+        end
+    end
     return f
 end
 function Frame:GetName() return self.name end
+function Frame:SetID(id) self.id = id end
+function Frame:GetID() return self.id end
 function Frame:SetSize(w, h) self.width, self.height = w, h end
 function Frame:SetWidth(w) self.width = w end
 function Frame:SetHeight(h) self.height = h end
@@ -101,6 +109,18 @@ function Frame:SetBagItem(bag, slot)
 end
 
 CreateFrame = newFrame
+function PanelTemplates_TabResize(tab, _, width) tab:SetWidth(width) end
+function PanelTemplates_SetTab(frame, id)
+    frame.selectedTab = id
+    for i = 1, frame.numTabs do
+        local tab = frame.Tabs[i]
+        tab:SetEnabled(i ~= id)
+        for _, part in ipairs({ "Left", "Middle", "Right" }) do
+            tab[part]:SetShown(i ~= id)
+            tab[part .. "Active"]:SetShown(i == id)
+        end
+    end
+end
 UIParent = newFrame("Frame", "UIParent")
 Minimap = newFrame("Frame", "Minimap", UIParent)
 Minimap:SetSize(140, 140)
@@ -337,6 +357,8 @@ function DeleteCursorItem() error("BagMarks must never destroy an item") end
 function GetTime() return M.time end
 function GetCoinTextureString(value) return value .. " copper" end
 function GetCursorPosition() return M.cursorX or 180, M.cursorY or 100 end
+function GetMouseFoci() return M.mouseFoci or {} end
+function GetCurrentKeyBoardFocus() return M.keyboardFocus end
 function GetBindingKey(action)
     local keys = {}
     for key, value in pairs(M.bindings) do if value == action then keys[#keys + 1] = key end end
@@ -469,6 +491,7 @@ function M.reset(A)
     M.time, M.bindings, M.overrides, M.bindingSet, M.savedBindingSet = 0, {}, nil, 1, nil
     M.cursor, M.rejectSale, M.rejectMail, M.combat, M.alt, M.ctrl, M.shift, M.targeting, M.failKey = nil, nil, nil, false, false, false, false, false, nil
     M.containers, M.bankButtons, M.reads = {}, {}, 0
+    M.mouseFoci, M.keyboardFocus = {}, nil
     M.saleAttempts = 0
     M.used, M.groundTarget = {}, false
     M.cursorLocationMissing, M.cursorKind, M.gamepad, M.failClear, M.keepCursor, M.clearCalls = nil, nil, false, false, false, 0
@@ -487,13 +510,15 @@ function M.reset(A)
     A.mode, A.merchantOpen, A.mailOpen, A.bankOpen, A.tradeOpen, A.pendingRefresh = false, false, false, false, false, false
     A.auctionOpen = false
     A.Mail:Close()
-    A.Bags.overlays = {}
+    A.Bags.overlays, A.Bags.inputOwners = {}, {}
+    A.Hover:Refresh()
     EUI_Bags = nil
     if A.Ellesmere then A.Ellesmere.slots, A.Ellesmere.registered = {}, nil end
     M.nativeClicks, M.menu = 0, nil
     A.inventory = {}
     A.Operations:Cancel()
-    A.Bindings.previous, A.Bindings.previousSet = nil, nil
+    A.Bindings.history = {}
+    A.Settings.bindingAction = A.Bindings.action
     A.Bindings:StopCapture()
     A.Settings.frame:Hide()
     A.Settings:SelectTab("General")

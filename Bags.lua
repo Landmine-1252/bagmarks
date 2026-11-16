@@ -1,5 +1,5 @@
 local _, A = ...
-local Bags = { overlays = {}, hooks = {} }
+local Bags = { overlays = {}, inputOwners = {}, hooks = {} }
 A.Bags = Bags
 
 function Bags:Coordinates(button)
@@ -85,6 +85,7 @@ function Bags:Attach(button, force)
         button:HookScript("OnHide", function() overlay.seenVisible = false; overlay:Hide(); overlay.icon:Hide() end)
         button:HookScript("OnShow", function() Bags:Update(button) end)
         self.overlays[button] = overlay
+        self.inputOwners[overlay] = button
         force = true
     end
     local bag, slot = self:Coordinates(button)

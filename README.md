@@ -31,9 +31,11 @@ Type **`/bm`** or **`/bagmarks`**, or **Left Click** the minimap button, to open
 | --- | --- |
 | **General** | Enable BagMarks, show the minimap button, set up automatic junk selling, and configure mail autofill |
 | **Marking** | Choose mouse controls, a key to cycle the hovered item, and a key to toggle Item Marking Mode |
-| **Appearance** | Toggle icons and tooltip labels; preview **Classic**, **Minimal**, or **Colorful** themes |
+| **Appearance** | Choose small or full-size marks, toggle icons and tooltip labels, and preview three icon themes |
 
-The minimap button, icons, and tooltip labels start on, with **Colorful** selected. Appearance changes apply immediately. **Left-drag** the minimap button to move it.
+The minimap button, icons, and tooltip labels start on, with **Colorful** selected. Theme and visibility changes apply immediately. **Left-drag** the minimap button to move it.
+
+**Larger marks:** Choose **Appearance → Mark size → Full item icon** to fill each marked item's icon square with a translucent symbol. The item artwork remains visible underneath. **Small corner** is the default. Size changes made during combat apply when combat ends.
 
 **Marking controls:** The default is **Ctrl + Shift + Right Click**. Change the modifier combination and mouse button in **Marking** to suit your setup. **None** needs no modifier; **Marking Mode only** enables marking only while the mode is on.
 
@@ -68,7 +70,7 @@ The helper attaches eligible **Mail** items while space remains. Bound items are
 
 ## A few things to know
 
-- **Locked items:** Clear the mark before moving or transferring them. Some actions and addons bypass protection. A Cozy Sleeping Bag usability issue is under investigation; see the [protection limits](docs/API_COMPATIBILITY.md).
+- **Locked items:** Reusable items can still be used with merchant, mail, trade, bank, and auction windows closed. Clear the mark before moving or transferring them. Some actions and addons bypass protection; see the [protection limits](docs/API_COMPATIBILITY.md).
 - **Saved choices:** Settings are shared across characters; marks belong to each character and follow bag movements. Check marks after splitting or merging stacks.
 - **Combat:** Marking, keybinding changes, and sale/mail helpers pause. Settings remain accessible. Existing icons stay visible when readable; new slots may wait until combat ends.
 - **EllesmereUI Bags:** Keep the icon column visible in List view. Combined stacks let you choose which individual stack to mark.
@@ -82,13 +84,14 @@ The helper attaches eligible **Mail** items while space remains. Bound items are
 | `/bm minimap` | Show or hide the minimap button |
 | `/bm theme` | Cycle icon themes |
 | `/bm reset` | Reset settings after confirmation; keep marks and keybindings |
+| `/bm debug` or `/bmcheck` | Open a copyable status report |
 | `/bm help` | Show the command list |
 
 ## Help improve BagMarks
 
 [Browse the code](https://github.com/Landmine-1252/bagmarks), [report a bug or suggest a feature](https://github.com/Landmine-1252/bagmarks/issues), or fork the repository and [open a pull request](https://github.com/Landmine-1252/bagmarks/pulls).
 
-Report your bag addon, what you tried, and what happened. Your installed version appears in BagMarks settings.
+When reporting an issue, run **`/bm debug`** (or **`/bmcheck`**), click **Select all**, and press **Ctrl+C**. Include the report with your bag addon, what you tried, and what happened.
 
 [What's new](CHANGELOG.md) · [MIT license](LICENSE)
 

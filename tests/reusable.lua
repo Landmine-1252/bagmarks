@@ -91,6 +91,48 @@ return function(M, A, test, eq, mark)
         eq(item.held, nil)
     end)
 
+    for _, interface in ipairs({ "Blizzard", "Ellesmere" }) do
+        for _, labels in ipairs({ true, false }) do
+            test(interface .. " hover releases a late-metadata hold with tooltip labels " .. tostring(labels), function()
+                A.SetOption("tooltips", labels)
+                M.reentrantLocks = true
+                local item = mark("Item-LateUse", 0, 1, "locked", { itemID = 211527 })
+                local button
+                if interface == "Ellesmere" then
+                    M.ellesmere(); A.Bags:InstallHooks()
+                    button = M.ellesmereButton(0, 1)
+                    EUI_Bags.RunItemOverlays(button, { bag = 0, slot = 1, info = { itemID = item.itemID }, itemLink = item.link })
+                else
+                    button = M.button(0, 1); A.Bags:Discover()
+                end
+                M.tick(0); A.eventFrame:Fire("OnUpdate", .3)
+                eq(item.held, true)
+                -- The item name was already cached, but its use spell becomes
+                -- readable later without either item-data event firing.
+                item.spellID = 429961
+                GameTooltip:SetOwner(button); GameTooltip:SetBagItem(0, 1)
+                eq(item.held, nil); eq(A.Protection.held[item.guid], nil)
+                M.tick(0)
+                eq(item.held, nil); eq(A.Store:Get(item.guid), "locked")
+                C_Container.UseContainerItem(0, 1); eq(M.used[1], item.guid)
+                eq(item.count, 1)
+            end)
+        end
+    end
+
+    test("late reusable metadata on hover cannot release a hold during a merchant visit", function()
+        local item = mark("Item-LateUse", 0, 1, "locked", { itemID = 211527 })
+        local button = M.button(0, 1); A.Bags:Discover()
+        MerchantFrame:Show(); event("MERCHANT_SHOW")
+        item.spellID = 429961
+        GameTooltip:SetOwner(button); GameTooltip:SetBagItem(0, 1)
+        eq(item.held, true); eq(A.Protection.held[item.guid], true)
+        eq(#M.unlockCalls, 0)
+        C_Container.UseContainerItem(0, 1); eq(#M.sold, 0)
+        event("MERCHANT_CLOSED")
+        eq(item.held, nil); eq(A.Store:Get(item.guid), "locked")
+    end)
+
     test("missing, throwing or unreadable reusable metadata keeps the stricter hold", function()
         local item = reusable(nil, nil, { consumable = true })
         item.consumable = false
@@ -110,6 +152,8 @@ return function(M, A, test, eq, mark)
 
     test("reusable detection never releases another owner's hold", function()
         local item = reusable(nil, nil, { held = true })
+        local button = M.button(0, 1); A.Bags:Discover()
+        GameTooltip:SetOwner(button); GameTooltip:SetBagItem(0, 1)
         eq(item.held, true); eq(M.lockCalls, 0); eq(#M.unlockCalls, 0)
         event("TRADE_SHOW"); event("TRADE_CLOSED")
         eq(item.held, true); eq(#M.unlockCalls, 0)

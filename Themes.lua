@@ -1,6 +1,9 @@
 -- All themes share the same three icon shapes and differ only in their RGB
 -- tint. Preview swatches and live item overlays use the same painting function.
 local _, A = ...
+A.IconSizes = { { "corner", "Small corner" }, { "full", "Full item icon" } }
+A.iconSizeLabels = {}
+for _, option in ipairs(A.IconSizes) do A.iconSizeLabels[option[1]] = option[2] end
 A.Themes = {
     Classic = { locked = { 1, .78, .25 }, junk = { .72, .36, .32 }, mail = { .9, .8, .57 } },
     Minimal = { locked = { .95, .95, .95 }, junk = { .65, .65, .65 }, mail = { .8, .8, .8 } },

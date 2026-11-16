@@ -106,6 +106,16 @@ function API:IsReusable(location)
     return consumableOK and A.Safe(consumable) and consumable == false
 end
 
+function API:MailInteractionActive()
+    -- A closed frame is not proof that mailing has ended. Ask the client;
+    -- nil means unknown and must never be treated as permission to release a hold.
+    local kind = Enum and Enum.PlayerInteractionType and Enum.PlayerInteractionType.MailInfo
+    if not A.Safe(kind) or type(kind) ~= "number" or not C_PlayerInteractionManager
+        or type(C_PlayerInteractionManager.IsInteractingWithNpcOfType) ~= "function" then return end
+    local ok, active = pcall(C_PlayerInteractionManager.IsInteractingWithNpcOfType, kind)
+    if ok and A.Safe(active) and type(active) == "boolean" then return active end
+end
+
 -- Unknown quest/refund status excludes an item from automated sale or mail.
 function API:IsQuest(item)
     if not C_Container.GetContainerItemQuestInfo then return true end

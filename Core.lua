@@ -2,14 +2,14 @@
 -- Modules share state through A; Blizzard's named entry points use globals.
 local addonName, A = ...
 A.name = addonName
-A.version = "1.0.2"
+A.version = "1.0.3"
 -- SavedVariables format version, independent of the addon release number.
 A.schema = 2
 A.states = { locked = "Locked", junk = "Junk", mail = "Mail" }
 -- Store.lua fills missing/invalid options from these values and keeps valid
 -- saved choices, including shortcuts selected before a default changed.
 A.defaults = {
-    enabled = true, minimap = true, tooltips = true, overlays = true,
+    enabled = true, minimap = true, tooltips = true, overlays = true, iconSize = "corner",
     modifier = "CTRL-SHIFT", mouseButton = "RightButton", markingAction = "menu",
     recipient = "", autoFillRecipient = true, autoSellJunk = false, theme = "Colorful", angle = 220,
 }

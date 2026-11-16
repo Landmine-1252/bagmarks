@@ -21,6 +21,7 @@ function Store:Initialize()
         if type(value) == type(default) then db[key] = value else db[key] = default end
     end
     if not ({ Classic = true, Minimal = true, Colorful = true })[db.theme] then db.theme = "Colorful" end
+    if db.iconSize ~= "corner" and db.iconSize ~= "full" then db.iconSize = A.defaults.iconSize end
     -- Schema 1 already has the single modifier; new input/mail preferences get safe defaults.
     if not A.Interaction.modifierLabels[db.modifier] then db.modifier = A.defaults.modifier end
     if not A.Interaction.buttonLabels[db.mouseButton] then db.mouseButton = A.defaults.mouseButton end

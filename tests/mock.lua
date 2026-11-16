@@ -15,6 +15,11 @@ local function newFrame(kind, name, parent, template)
             f[part] = newFrame("Texture", nil, f)
         end
     end
+    if template == "UIPanelInputScrollFrameTemplate" then
+        f.EditBox = newFrame("EditBox", nil, f)
+        f.CharCount = newFrame("FontString", nil, f)
+        f.EditBox.multiLine = true
+    end
     return f
 end
 function Frame:GetName() return self.name end
@@ -23,13 +28,19 @@ function Frame:GetID() return self.id end
 function Frame:SetSize(w, h) self.width, self.height = w, h end
 function Frame:SetWidth(w) self.width = w end
 function Frame:SetHeight(h) self.height = h end
-function Frame:GetWidth() return self.width end
-function Frame:GetHeight() return self.height end
+function Frame:GetWidth()
+    if self.anchored then return self.anchored:GetWidth() * self.anchored:GetEffectiveScale() / self:GetEffectiveScale() end
+    return self.width
+end
+function Frame:GetHeight()
+    if self.anchored then return self.anchored:GetHeight() * self.anchored:GetEffectiveScale() / self:GetEffectiveScale() end
+    return self.height
+end
 function Frame:SetPoint(...) self.point = { ... } end
 function Frame:GetPoint() if self.point then return unpack(self.point) end end
 function Frame:GetNumPoints() return self.point and 1 or 0 end
-function Frame:ClearAllPoints() self.point = nil end
-function Frame:SetAllPoints(target) self.anchored = target end
+function Frame:ClearAllPoints() self.point, self.anchored = nil, nil end
+function Frame:SetAllPoints(target) self.anchored = target or self.parent end
 function Frame:GetCenter() return 100, 100 end
 function Frame:GetEffectiveScale() return (self.scale or 1) * (self.parent and self.parent:GetEffectiveScale() or 1) end
 function Frame:SetScale(scale) self.scale = scale end
@@ -80,6 +91,8 @@ function Frame:GetStringHeight() return 15 * select(2, self:GetText():gsub("\n",
 function Frame:SetJustifyH(value) self.justifyH = value end
 function Frame:SetJustifyV(value) self.justifyV = value end
 function Frame:SetTexture(value) self.texture = value end
+function Frame:SetDrawLayer(layer, sublevel) self.layer, self.sublevel = layer, sublevel or 0 end
+function Frame:GetDrawLayer() return self.layer, self.sublevel end
 function Frame:SetVertexColor(...) self.color = { ... } end
 function Frame:SetColorTexture(...) self.color = { ... } end
 function Frame:SetDesaturated(value) self.desaturated = value end
@@ -90,15 +103,28 @@ function Frame:HasFocus() return self.focus end
 function Frame:ClearFocus()
     local focused = self.focus
     self.focus = false
+    if M.keyboardFocus == self then M.keyboardFocus = nil end
     if focused then self:Fire("OnEditFocusLost") end
+end
+function Frame:SetFocus()
+    if M.keyboardFocus and M.keyboardFocus ~= self then M.keyboardFocus:ClearFocus() end
+    self.focus, M.keyboardFocus = true, self
 end
 function Frame:HighlightText() self.highlighted = true end
 function Frame:StartMoving() self.moving = true end
 function Frame:StopMovingOrSizing() self.moving = false end
 function Frame:SetScrollChild(child) self.scrollChild = child end
 function Frame:SetVerticalScroll(value) self.verticalScroll = value end
-function Frame:CreateTexture() return newFrame("Texture", nil, self) end
-function Frame:CreateFontString() return newFrame("FontString", nil, self) end
+function Frame:CreateTexture(name, layer, _, sublevel)
+    local texture = newFrame("Texture", name, self)
+    texture:SetDrawLayer(layer or "ARTWORK", sublevel)
+    return texture
+end
+function Frame:CreateFontString(name, layer)
+    local text = newFrame("FontString", name, self)
+    text:SetDrawLayer(layer or "OVERLAY")
+    return text
+end
 function Frame:SetOwner(owner) self.owner = owner end
 function Frame:GetOwner() return self.owner end
 function Frame:AddLine(text) self.lines = self.lines or {}; self.lines[#self.lines + 1] = text end
@@ -139,7 +165,15 @@ BankFrame:Hide()
 UISpecialFrames, SlashCmdList = {}, {}
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, message) M.messages[#M.messages + 1] = message end }
 Enum = { BagIndex = { Backpack = 0, Bag_1 = 1, Bag_2 = 2, Bag_3 = 3, Bag_4 = 4, ReagentBag = 5 },
-    BankType = { Character = 0, Account = 2 }, TooltipDataType = { Item = 0 } }
+    BankType = { Character = 0, Account = 2 }, TooltipDataType = { Item = 0 },
+    PlayerInteractionType = { MailInfo = 17 } }
+C_PlayerInteractionManager = { IsInteractingWithNpcOfType = function(kind)
+    assert(kind == Enum.PlayerInteractionType.MailInfo)
+    M.mailQueries = (M.mailQueries or 0) + 1
+    -- Tests can override the server state independently of BagMarks' event flag.
+    if M.mailActive ~= nil then return M.mailActive end
+    return M.A and M.A.mailOpen == true or false
+end }
 C_Bank = { FetchPurchasedBankTabData = function(bankType)
     return { { ID = bankType == 0 and 6 or 15 } }
 end }
@@ -494,6 +528,7 @@ function M.reset(A)
     M.mouseFoci, M.keyboardFocus = {}, nil
     M.saleAttempts = 0
     M.used, M.groundTarget = {}, false
+    M.mailActive, M.mailQueries = nil, 0
     M.cursorLocationMissing, M.cursorKind, M.gamepad, M.failClear, M.keepCursor, M.clearCalls = nil, nil, false, false, false, 0
     M.lockCalls, M.unlockCalls, M.reentrantLocks, M.reentrantCursor = 0, {}, false, false
     M.locationFailure, M.secretLocation, M.secretLock, M.failLock, M.rejectLock, M.failUnlock = false, false, false, false, false, false
@@ -522,6 +557,7 @@ function M.reset(A)
     A.Bindings:StopCapture()
     A.Settings.frame:Hide()
     A.Settings:SelectTab("General")
+    if A.Diagnostics.frame then A.Diagnostics.frame:Hide() end
     MerchantFrame:Hide(); SendMailFrame:Hide(); BankFrame:Hide()
     SendMailNameEditBox:SetText("")
     SendMailFrame.sendMode, SendMailNameEditBox.focus, SendMailNameEditBox.highlighted = nil, false, false

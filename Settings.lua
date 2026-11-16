@@ -122,11 +122,22 @@ function SettingsUI:Create()
 
     check(appearance, "tooltips", "Show tooltip labels", 0)
     check(appearance, "overlays", "Show item icons", -30)
-    UI.Label(appearance, "Icon themes", 0, -90, "GameFontNormal")
+    UI.Label(appearance, "Mark size", 0, -70)
+    self.iconSize = UI.Button(appearance, "", 200, 172, -64, function(owner)
+        MenuUtil.CreateContextMenu(owner, function(_, root)
+            for _, option in ipairs(A.IconSizes) do
+                local value = option[1]
+                root:CreateRadio(option[2], function() return A.db.iconSize == value end,
+                    function() A.SetOption("iconSize", value) end)
+            end
+        end)
+    end)
+    UI.Tip(self.iconSize, "Mark size", "Small corner keeps the usual badge. Full item icon stretches a translucent mark across the item artwork, beneath counts and cooldowns. Changes during combat apply when combat ends.")
+    UI.Label(appearance, "Icon themes", 0, -112, "GameFontNormal")
     self.themes = {}
     for i, name in ipairs({ "Classic", "Minimal", "Colorful" }) do
         local theme = name
-        local button = UI.Button(appearance, name, 110, (i - 1) * 126, -114, function() A.SetOption("theme", theme) end)
+        local button = UI.Button(appearance, name, 110, (i - 1) * 126, -136, function() A.SetOption("theme", theme) end)
         self.themes[name] = button
         for j, state in ipairs({ "locked", "junk", "mail" }) do
             local icon = button:CreateTexture(nil, "OVERLAY")
@@ -135,7 +146,10 @@ function SettingsUI:Create()
             A.PaintIcon(icon, state, theme)
         end
     end
-    UI.Label(appearance, "Themes update your bag and bank icons immediately.", 0, -190, "GameFontHighlightSmall")
+    UI.Label(appearance, "Themes update your bag and bank icons immediately.", 0, -208, "GameFontHighlightSmall")
+    self.iconSizeNote = UI.Label(appearance, "", 0, -240, "GameFontHighlightSmall")
+    self.iconSizeNote:SetWidth(370)
+    self.iconSizeNote:SetJustifyH("LEFT")
     local divider = f:CreateTexture(nil, "ARTWORK")
     divider:SetColorTexture(.55, .45, .25, .5)
     divider:SetPoint("TOPLEFT", 24, -424)
@@ -179,6 +193,10 @@ function SettingsUI:Refresh()
     self.modifier:SetEnabled(menuEnabled)
     self.mouseButton:SetEnabled(menuEnabled)
     self.markingAction:SetEnabled(menuEnabled)
+    self.iconSize:SetText(A.iconSizeLabels[A.db.iconSize])
+    self.iconSize:SetEnabled(menuEnabled)
+    self.iconSizeNote:SetText(A.InCombat() and "Size changes will apply when combat ends."
+        or "Full item icon uses a translucent mark so the item\nartwork stays visible. Small corner is the default.")
     self.interactionHint:SetText(A.Interaction:Hint() .. (A.db.markingAction == "cycle"
         and "\nNormal > Locked > Junk > Mail > Normal" or "\nChoose a mark from the compact item menu."))
     -- Refreshes also come from bag events. Preserve text/caret while the user

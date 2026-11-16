@@ -20,17 +20,35 @@ local function queueRefresh()
     C_Timer.After(0, updateInventory)
 end
 
+local function closeMail()
+    local wasOpen = A.mailOpen
+    A.mailOpen = false
+    A.Mail:Close()
+    if wasOpen then
+        A.Operations:Cancel()
+        A.Refresh() -- Release our reusable-item holds only after every risk ends.
+    end
+end
+
+local function reconcileMail()
+    -- The MAIL_SHOW flag can outlive the actual mailbox interaction.
+    -- Only an explicit false clears the flag; a hidden custom UI or unavailable
+    -- API cannot weaken protection while the mailbox is still active.
+    if A.mailOpen and A.API:MailInteractionActive() == false then closeMail() end
+end
+
 function A.Slash(message)
     local command = (message or ""):match("^%s*(%S*)"):lower()
     if command == "" then A.Settings:Toggle()
     elseif command == "mode" then A.ToggleMode()
     elseif command == "minimap" then A.SetOption("minimap", not A.db.minimap)
     elseif command == "theme" then A.CycleTheme()
+    elseif command == "debug" then A.Diagnostics:Open(message:match("^%s*%S+%s*(.-)%s*$"))
     elseif command == "reset" then
         local shortcut = A.Interaction.modifierLabels[A.defaults.modifier] .. " + " .. A.Interaction.buttonLabels[A.defaults.mouseButton]
         A.UI:Confirm("Reset BagMarks settings", "Restore default preferences?\n\nItem marks and Blizzard keybindings will be kept.\n\nDefault theme: " .. A.defaults.theme .. "\nDefault shortcut: " .. shortcut, "Reset settings", function() A.Store:ResetSettings() end)
     else
-        A.Print("/bm or /bagmarks: Settings; /bm mode: Marking mode; /bm minimap: Minimap button; /bm theme: Cycle themes; /bm reset: Reset preferences; /bm help: This reference.")
+        A.Print("/bm or /bagmarks: Settings; /bm mode: Marking mode; /bm minimap: Minimap button; /bm theme: Cycle themes; /bm reset: Reset preferences; /bm debug or /bmcheck: Copyable diagnostics; /bm help: This reference.")
     end
 end
 
@@ -42,9 +60,12 @@ local function initialize()
     A.ready = true
     SLASH_BAGMARKS1, SLASH_BAGMARKS2 = "/bagmarks", "/bm"
     SlashCmdList.BAGMARKS = A.Slash
+    SLASH_BAGMARKSCHECK1 = "/bmcheck"
+    SlashCmdList.BAGMARKSCHECK = function(message) A.Diagnostics:Open(message) end
     A.Bags:InstallHooks()
     A.Minimap:Create()
     A.Settings:Create() -- Plain, unprotected window can subsequently open in combat.
+    A.Diagnostics:Create()
     A.Hover:Create()
     A.Settings:RegisterCategory()
     A.Mail:InstallHooks()
@@ -125,10 +146,16 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         A.Operations:CreateButtons()
         queueRefresh()
     elseif event == "MAIL_CLOSED" then
-        A.mailOpen = false
-        A.Mail:Close()
-        A.Operations:Cancel()
-        A.Refresh()
+        closeMail()
+    elseif event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then
+        local mailType = Enum and Enum.PlayerInteractionType and Enum.PlayerInteractionType.MailInfo
+        if A.Safe(arg1) and type(arg1) == "number" and A.Safe(mailType) and type(mailType) == "number"
+            and arg1 == mailType and A.mailOpen then
+            reconcileMail()
+            -- Hide notifications can precede the client's interaction update.
+            -- Re-read next frame; a mailbox reopened meanwhile stays protected.
+            if A.mailOpen then C_Timer.After(0, reconcileMail) end
+        end
     elseif event == "MAIL_SEND_SUCCESS" then
         A.Operations:Cancel()
         A.Mail:NewDraft()
@@ -171,7 +198,7 @@ for _, event in ipairs({
     "MODIFIER_STATE_CHANGED", "CURSOR_CHANGED", "UPDATE_BINDINGS", "UI_ERROR_MESSAGE",
     "DELETE_ITEM_CONFIRM", "TRADE_SHOW", "TRADE_CLOSED", "TRADE_PLAYER_ITEM_CHANGED", "TRADE_ACCEPT_UPDATE", "TRADE_UPDATE",
     "CURRENT_SPELL_CAST_CHANGED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",
-    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
+    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
 }) do
     -- Event names can differ between client revisions; capability failure is nonfatal.
     pcall(frame.RegisterEvent, frame, event)
@@ -182,10 +209,14 @@ end
 local elapsed = 0
 local lastRisk
 frame:SetScript("OnUpdate", function(_, delta)
-    if not A.ready or not A.CanAct() then return end
+    if not A.ready then return end
     elapsed = elapsed + delta
     if elapsed < .2 then return end
     elapsed = 0
+    -- This is one read-only query only while mail is considered open, including
+    -- combat. Marking and inventory discovery still obey the usual combat gate.
+    reconcileMail()
+    if not A.CanAct() then return end
     A.Bags:Discover()
     -- Some target/context changes have no useful bag event. Resync holds only
     -- when this risk classification changes, not on every discovery tick.

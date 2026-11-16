@@ -43,6 +43,31 @@ function Bags:Click(overlay, mouseButton)
     end
 end
 
+function Bags:IconGeometry(button, size)
+    local shown = A.Ellesmere and A.Ellesmere.slots[button]
+    local host = shown and shown.host or button
+    if size == "full" then
+        -- Paint on the base button, below cooldowns and Ellesmere's text frame.
+        -- A list row can be hundreds of pixels wide; its host covers only the icon.
+        return button, shown and host or button.icon or button.Icon or button
+    end
+    return host, host
+end
+
+function Bags:WatchIconHost(button, overlay, host)
+    overlay.watchedHosts = overlay.watchedHosts or {}
+    if overlay.watchedHosts[host] then return end
+    overlay.watchedHosts[host] = true
+    -- Full-size art is parented below this host so cooldowns remain on top.
+    -- Mirror its visibility when Ellesmere hides the icon column or reuses rows.
+    local function currentHost()
+        local shown = A.Ellesmere and A.Ellesmere.slots[button]
+        return shown and shown.host == host
+    end
+    host:HookScript("OnHide", function() if currentHost() then overlay.icon:Hide() end end)
+    host:HookScript("OnShow", function() if currentHost() then self:Update(button) end end)
+end
+
 function Bags:Layout(button, overlay)
     local shown = A.Ellesmere and A.Ellesmere.slots[button]
     local host = shown and shown.host or UIParent
@@ -53,13 +78,27 @@ function Bags:Layout(button, overlay)
     overlay:SetAllPoints(button)
     overlay:SetFrameStrata(button:GetFrameStrata())
     overlay:SetFrameLevel(math.max(button:GetFrameLevel(), host:GetFrameLevel()) + 5)
-    local iconHost = shown and host or button
+    local iconHost, target = self:IconGeometry(button, A.db.iconSize)
     if overlay.icon:GetParent() ~= iconHost then overlay.icon:SetParent(iconHost) end
     overlay.icon:SetScale(button:GetEffectiveScale() / iconHost:GetEffectiveScale())
     overlay.icon:ClearAllPoints()
-    local iconSize = shown and host:GetWidth() < 28 and 12 or 14
-    overlay.icon:SetSize(iconSize, iconSize)
-    overlay.icon:SetPoint("TOPRIGHT", iconHost, "TOPRIGHT", -3, -3)
+    if A.db.iconSize == "full" then
+        overlay.icon:SetAllPoints(target)
+        -- Blizzard's icon is BORDER with counts in ARTWORK. Ellesmere paints
+        -- its icon in ARTWORK but moves counts to a higher frame.
+        overlay.icon:SetDrawLayer("ARTWORK", shown and 1 or -1)
+        overlay.icon:SetAlpha(.6)
+    else
+        local iconSize = shown and host:GetWidth() < 28 and 12 or 14
+        overlay.icon:SetSize(iconSize, iconSize)
+        overlay.icon:SetPoint("TOPRIGHT", iconHost, "TOPRIGHT", -3, -3)
+        overlay.icon:SetDrawLayer("OVERLAY", 7)
+        overlay.icon:SetAlpha(1)
+    end
+    if shown then self:WatchIconHost(button, overlay, host) end
+    -- Keep the applied layout separately from the saved preference. During
+    -- combat, a new size waits for safe reparenting/anchoring after combat ends.
+    overlay.iconSize, overlay.iconTarget = A.db.iconSize, target
 end
 
 function Bags:Attach(button, force)
@@ -103,11 +142,13 @@ function Bags:Update(button)
     if not A.IsEnabled() or not button:IsVisible() then overlay:Hide(); overlay.icon:Hide(); return end
     local inCombat = A.InCombat()
     local shown = A.Ellesmere and A.Ellesmere.slots[button]
+    if shown and not shown.host:IsVisible() then overlay:Hide(); overlay.icon:Hide(); return end
     if inCombat then
         overlay:Hide()
         -- A renderer can replace its icon host mid-combat. Hide the old texture
         -- until it can be reparented safely, rather than drawing on a stale row.
-        if overlay.icon:GetParent() ~= (shown and shown.host or button) then overlay.icon:Hide(); return end
+        local iconHost, target = self:IconGeometry(button, overlay.iconSize)
+        if overlay.icon:GetParent() ~= iconHost or overlay.iconTarget ~= target then overlay.icon:Hide(); return end
     else
         self:Layout(button, overlay)
     end
@@ -171,12 +212,19 @@ function Bags:Discover()
 end
 
 function Bags:Tooltip(tooltip)
-    if not A.CanAct() or not A.db.tooltips then return end
+    if not A.CanAct() then return end
     local owner = tooltip:GetOwner()
     if not owner or not self.overlays[owner] then return end
     local item = self:Read(owner)
     if not item then return end
     local state = A.Store:Get(item.guid)
+    local reusable = state == "locked" and A.API:IsReusable(item.location)
+    -- Hover can expose use-spell data without another item-data event. Recheck
+    -- an earlier conservative hold before the player's ordinary click, even
+    -- with tooltip labels disabled. SyncHolds still validates the exact GUID
+    -- and all transfer/targeting guards; the saved Locked mark is kept.
+    if reusable and A.Protection.held[item.guid] and not self:RiskyContext() then A.Protection:SyncHolds() end
+    if not A.db.tooltips then return end
     local shown = A.Ellesmere and A.Ellesmere.slots[owner]
     if shown and shown.total then
         local hasLocked, count, mixed
@@ -191,7 +239,7 @@ function Bags:Tooltip(tooltip)
         local color = A.Themes[A.db.theme][state]
         tooltip:AddLine("BagMarks: " .. A.states[state], color[1], color[2], color[3])
         if state == "locked" then
-            if A.API:IsReusable(item.location) then
+            if reusable then
                 tooltip:AddLine("Reusable: can be used while Locked. Close merchant, mail, trade, bank, and auction windows and finish item targeting first.", 1, .72, .3, true)
                 tooltip:AddLine("Clear this mark before moving or transferring the item.", 1, .72, .3, true)
             else

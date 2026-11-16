@@ -1,5 +1,22 @@
 # BagMarks Changelog
 
+## 1.0.3 - Full-size marks and reusable-item fixes
+
+### Added
+
+- Choose **Appearance → Mark size → Full item icon** for a translucent mark that fills the item icon square. The original **Small corner** option remains the default.
+- Support full-size marks in Blizzard bags and banks and Ellesmere Grid/List views. Size changes made during combat apply automatically after combat ends.
+- Open a copyable status report with **`/bm debug`** or **`/bmcheck`**. Include an item ID, such as `/bm debug 211527`, to focus on one item type. Reports show controls, interaction states, and item-hold reasons without changing markings or items.
+
+### Fixed
+
+- Release BagMarks' hold on reusable items when the mailbox has closed but its session flag remains open. This addresses the reported grey Cozy Sleeping Bag while keeping its Locked mark and protection during active mail interactions.
+- Recheck an earlier hold when hovering an item reveals its reusable use effect, including when tooltip labels are disabled.
+
+### Validation
+
+- Offline tests cover full-size marks, stale mailbox state, delayed item data, and read-only diagnostics. User testing confirmed the sleeping bag remains usable while Locked after closing mail with this repair. Broader interaction paths, the report window, rendering, and taint still need in-game verification.
+
 ## 1.0.2 - Hover marking and clearer controls
 
 ### Added

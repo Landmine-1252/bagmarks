@@ -896,8 +896,11 @@ end)
 
 dofile("tests/protection.lua")(M, A, test, eq, mark)
 dofile("tests/reusable.lua")(M, A, test, eq, mark)
+dofile("tests/mail_context.lua")(M, A, test, eq, mark)
 dofile("tests/autosell.lua")(M, A, test, eq, mark)
 dofile("tests/combat_icons.lua")(M, A, test, eq, mark)
 dofile("tests/hover.lua")(M, A, test, eq, mark)
+dofile("tests/icon_size.lua")(M, A, test, eq, mark)
+dofile("tests/diagnostics.lua")(M, A, test, eq, mark)
 
 print(string.format("%d mocked tests passed under %s. No in-game or taint testing was performed.", passed, _VERSION))

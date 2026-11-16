@@ -174,8 +174,9 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         A.auctionOpen = event == "AUCTION_HOUSE_SHOW"
         A.Protection:SyncHolds()
         queueRefresh()
-    elseif event == "MODIFIER_STATE_CHANGED" or event == "CURSOR_CHANGED" or event == "CURRENT_SPELL_CAST_CHANGED" then
-        if event == "CURSOR_CHANGED" then A.Protection:ReturnCursor() end
+    elseif event == "CURSOR_CHANGED" then
+        A.Protection:QueueCursorCheck()
+    elseif event == "MODIFIER_STATE_CHANGED" or event == "CURRENT_SPELL_CAST_CHANGED" then
         if event ~= "MODIFIER_STATE_CHANGED" then A.Protection:SyncHolds() end
         A.Bags:Refresh()
         A.Operations:RefreshButtons()

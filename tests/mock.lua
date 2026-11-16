@@ -273,7 +273,16 @@ C_Item = {
         M.unlockCalls[#M.unlockCalls + 1] = guid
         if M.failUnlock then error("release refused") end
         local location = C_Item.GetItemLocation(guid)
-        if location then locatedItem(location).held = nil end
+        if location and not M.rejectUnlock then locatedItem(location).held = nil end
+        if M.reentrantLocks then M.A.eventFrame:Fire("OnEvent", "ITEM_LOCK_CHANGED") end
+    end,
+    UnlockItem = function(location)
+        local item = assert(locatedItem(location), "unlocking absent item")
+        M.locationUnlockCalls = (M.locationUnlockCalls or 0) + 1
+        -- Keep a single call log for both supported native release paths.
+        M.unlockCalls[#M.unlockCalls + 1] = item.guid
+        if M.failUnlock then error("release refused") end
+        if not M.rejectUnlock then item.held = nil end
         if M.reentrantLocks then M.A.eventFrame:Fire("OnEvent", "ITEM_LOCK_CHANGED") end
     end,
     CanBeRefunded = function(location) return at(location.bag, location.slot).refundable or false end,
@@ -532,6 +541,7 @@ function M.reset(A)
     M.cursorLocationMissing, M.cursorKind, M.gamepad, M.failClear, M.keepCursor, M.clearCalls = nil, nil, false, false, false, 0
     M.lockCalls, M.unlockCalls, M.reentrantLocks, M.reentrantCursor = 0, {}, false, false
     M.locationFailure, M.secretLocation, M.secretLock, M.failLock, M.rejectLock, M.failUnlock = false, false, false, false, false, false
+    M.rejectUnlock, M.locationUnlockCalls = false, 0
     M.removals, M.closeMailCalls, M.failRemoval, M.rejectRemoval, M.failCloseMail, M.reentrantMail = {}, 0, false, false, false, false
     M.tradeItems, M.cancelTradeCalls, M.failCancelTrade = {}, 0, false
     M.secretTooltip, M.secretTooltipGUID, M.missingTooltipGUID = false, false, false

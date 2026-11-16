@@ -1,5 +1,21 @@
 # BagMarks Changelog
 
+## 1.0.4 - Safer sorting with Locked reusable items
+
+### Fixed
+
+- Let a bag sort finish its pickup-and-place sequence before checking for a Locked item left on the cursor. This addresses a reproduced conflict with Ellesmere sorting that interrupted moves involving reusable items such as Cozy Sleeping Bag.
+- Keep deletion protection immediate. An unfinished manual drag is checked on the next frame, while the item's Locked mark and merchant, mail, trade, and item-targeting guards remain active.
+- Pair native item holds with a matching location-based release when available. Keep release tracking until the client confirms the same item is free, including while sorting or server movement keeps an item busy.
+
+### Improved
+
+- Add the protection revision, pending release status, cursor-check counters, and Ellesmere repaint status to `/bm debug` and `/bmcheck` reports.
+
+### Validation
+
+- The sorting regression interrupts a pickup/place sequence on the earlier code and passes with this fix. The user installed 1.0.4, logged out and back in to clear the existing stuck state, and confirmed the Locked sleeping bag remains usable after Ellesmere sorting. Offline checks cover completed swaps, unfinished drags, immediate deletion checks, identical copies, combat, and native release verification. Broader interaction and taint checks remain pending.
+
 ## 1.0.3 - Full-size marks and reusable-item fixes
 
 ### Added

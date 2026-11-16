@@ -37,6 +37,7 @@ function Diagnostics:Report(itemID)
     local risk = read(A.Protection.RiskyContext, A.Protection)
     local lines = {
         "BagMarks " .. A.version .. " diagnostics",
+        "ProtectionRevision=" .. value(A.protectionRevision),
         "Client=" .. value(read(GetBuildInfo)) .. "; combat=" .. value(A.InCombat()),
         "Enabled=" .. value(A.IsEnabled()) .. "; readOnly=" .. value(A.readOnly) .. "; itemAPI=" .. value(A.API.available),
         "MarkingMode=" .. value(A.mode) .. "; gestureActive=" .. value(read(A.Interaction.Active, A.Interaction)),
@@ -44,6 +45,7 @@ function Diagnostics:Report(itemID)
         "Theme=" .. value(A.db.theme) .. "; markSize=" .. value(A.db.iconSize)
             .. "; icons=" .. value(A.db.overlays) .. "; labels=" .. value(A.db.tooltips),
         "EllesmereRegistered=" .. value(A.Ellesmere.registered ~= nil),
+        "EllesmereRefreshEnabled=" .. value(EUI_Bags and EUI_Bags.refreshEnabled),
         "Contexts: merchant=" .. value(A.merchantOpen) .. ", mail=" .. value(A.mailOpen)
             .. ", trade=" .. value(A.tradeOpen) .. ", bank=" .. value(A.bankOpen) .. ", auction=" .. value(A.auctionOpen),
         "LiveMailbox=" .. value(mailbox) .. "; riskyContext=" .. value(risk),
@@ -51,6 +53,8 @@ function Diagnostics:Report(itemID)
             .. ", itemID=" .. value(read(SpellCanTargetItemID)),
         "HoldsAvailable=" .. value(A.Protection.holdsAvailable) .. "; syncing=" .. value(A.Protection.syncing == true)
             .. "; stopping=" .. value(A.Protection.stopping == true),
+        "CursorProtection: pending=" .. value(A.Protection.cursorCheck ~= nil)
+            .. ", checks=" .. value(A.Protection.cursorChecks or 0) .. ", returns=" .. value(A.Protection.cursorReturns or 0),
         "AutoSell=" .. value(A.db.autoSellJunk) .. "; mailAutofill=" .. value(A.db.autoFillRecipient)
             .. "; recipientConfigured=" .. value(A.db.recipient ~= ""),
     }
@@ -84,6 +88,7 @@ function Diagnostics:Report(itemID)
         local item = items[index]
         local state = A.Store:Get(item.guid)
         local owned = A.Protection.held[item.guid] == true
+        local release = A.Protection.releases and A.Protection.releases[item.guid]
         local nativeHeld = C_Item and read(C_Item.IsLocked, item.location)
         local lookup = C_Item and read(C_Item.GetItemLocation, item.guid)
         local matches = lookup and read(C_Item.GetItemGUID, lookup) == item.guid
@@ -91,7 +96,8 @@ function Diagnostics:Report(itemID)
         local lookupReusable
         if matches then lookupReusable = read(A.API.IsReusable, A.API, lookup) end
         local reason
-        if state ~= "locked" then reason = owned and "Owned hold remains after the Locked mark was cleared." or "Not marked Locked."
+        if release then reason = "Unlock requested; the client has not confirmed the item is free."
+        elseif state ~= "locked" then reason = owned and "Owned hold remains after the Locked mark was cleared." or "Not marked Locked."
         elseif A.Protection.syncing then reason = "Protection synchronization is active."
         elseif A.mailOpen and mailbox == false then reason = "Stale mailbox flag is blocking reusable use."
         elseif risk ~= false then reason = "Transfer or item-targeting protection is active or unreadable."
@@ -107,6 +113,8 @@ function Diagnostics:Report(itemID)
         lines[#lines + 1] = "  reusable: slot=" .. value(slotReusable) .. ", lookup=" .. value(lookupReusable)
             .. "; held: native=" .. value(nativeHeld) .. ", owned=" .. value(owned) .. "; busy=" .. value(item.busy)
         lines[#lines + 1] = "  Lookup data: " .. metadata(matches and lookup or nil)
+        lines[#lines + 1] = "  Release: state=" .. (release and release.state or "none")
+            .. ", method=" .. (release and release.method or "none")
     end
     if #items > 40 then
         lines[#lines + 1] = "Showing 40 items. Use /bm debug ITEM_ID to narrow the report."

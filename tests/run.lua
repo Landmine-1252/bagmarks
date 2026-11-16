@@ -895,6 +895,8 @@ test("standard AddOns menu callbacks operate even when the minimap button is hid
 end)
 
 dofile("tests/protection.lua")(M, A, test, eq, mark)
+dofile("tests/hold_release.lua")(M, A, test, eq, mark)
+dofile("tests/sort_cursor.lua")(M, A, test, eq, mark)
 dofile("tests/reusable.lua")(M, A, test, eq, mark)
 dofile("tests/mail_context.lua")(M, A, test, eq, mark)
 dofile("tests/autosell.lua")(M, A, test, eq, mark)

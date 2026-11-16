@@ -1,8 +1,10 @@
 -- Native holds and transfer checks are best-effort client safeguards. A saved
--- Locked mark is persistent intent; held tracks this session's native holds.
+-- Locked mark is persistent intent; held tracks acquisitions, including those
+-- whose release has not yet been verified. releases never grants ownership.
 local _, A = ...
 local Protection = { held = {} }
 A.Protection = Protection
+A.protectionRevision = "cursor-settle-2" -- Identifies protection behavior in support reports.
 
 local function guid(value)
     if A.Safe(value) and type(value) == "string" and value:match("^Item%-") then return value end
@@ -30,6 +32,26 @@ function Protection:CursorGUID()
     end
 end
 
+function Protection:QueueCursorCheck()
+    if self.cursorCheck or self.checkingCursor or self.stopping then return end
+    -- CURSOR_CHANGED runs inside PickupContainerItem. Clearing there interrupts
+    -- a sort's pickup/place sequence. Inspect the live cursor on the next frame;
+    -- never carry a queued GUID forward onto a different cursor item.
+    local ticket = {}
+    self.cursorCheck = ticket
+    C_Timer.After(0, function()
+        if self.cursorCheck ~= ticket or self.stopping then return end
+        self.cursorCheck, self.checkingCursor = nil, true
+        self.cursorChecks = (self.cursorChecks or 0) + 1
+        self:ReturnCursor()
+        self:SyncHolds()
+        A.Bags:Refresh()
+        A.Operations:RefreshButtons()
+        A.Hover:Refresh()
+        self.checkingCursor = false
+    end)
+end
+
 function Protection:ReturnCursor(requested, deleting)
     if self.returning or not A.IsEnabled() then return false end
     requested = guid(requested)
@@ -54,6 +76,7 @@ function Protection:ReturnCursor(requested, deleting)
         A.Print("Could not return the Locked item. Cancel the action and keep the item.")
         return false
     end
+    self.cursorReturns = (self.cursorReturns or 0) + 1
     if deleting and InputUtil and read(InputUtil.IsGamepadUIEnabled) == true then
         A.Print("Locked item returned. Cancel any remaining gamepad deletion confirmation.")
     else
@@ -62,17 +85,64 @@ function Protection:ReturnCursor(requested, deleting)
     return true
 end
 
-function Protection:Release(guidToRelease)
-    if not self.held[guidToRelease] then return end
-    -- The client has no ownership token. Never unlock an item that was already
-    -- held when BagMarks inspected it; release only our successful acquisitions.
-    if C_Item and type(C_Item.UnlockItemByGUID) == "function" then
-        -- Remove our record before any synchronous unlock event. A successful
-        -- pcall proves only that Lua did not throw, not that the hold was released.
-        self.held[guidToRelease] = nil
-        local ok = pcall(C_Item.UnlockItemByGUID, guidToRelease)
-        if not ok then self.held[guidToRelease] = true end
+function Protection:VerifyRelease(itemGUID, request)
+    if not self.releases or self.releases[itemGUID] ~= request then return false end
+    local location = C_Item and read(C_Item.GetItemLocation, itemGUID)
+    if location and read(C_Item.DoesItemExist, location) == true
+        and guid(read(C_Item.GetItemGUID, location)) == itemGUID
+        and read(C_Item.IsLocked, location) == false then
+        self.held[itemGUID], self.releases[itemGUID] = nil, nil
+        return true
     end
+    if request.state ~= "waiting" or request.pending then return false end
+    if self.stopping or GetTime() >= request.deadline then
+        request.state = "unverified"
+        if not self.stopping then
+            self:WarnOnce("release:" .. itemGUID, "The client still reports an item busy after BagMarks requested its release. No further unlock requests were sent. Use /bm debug for its status.")
+        end
+        return false
+    end
+    -- A successful API call has no acknowledgement result. Observe for at most
+    -- two seconds; never spam unlocks while a sort/server move may still be busy.
+    request.pending = true
+    C_Timer.After(.2, function()
+        if not self.releases or self.releases[itemGUID] ~= request then return end
+        request.pending = nil
+        if self:VerifyRelease(itemGUID, request) then self:SyncHolds() end
+    end)
+    return false
+end
+
+function Protection:Release(guidToRelease)
+    if not self.held[guidToRelease] or self.releasing then return end
+    self.releases = self.releases or {}
+    local request = self.releases[guidToRelease]
+    if request and request.state ~= "error" then self:VerifyRelease(guidToRelease, request); return end
+    -- The client has no ownership token. Release only a recorded acquisition.
+    -- Pair LockItem(location) with the native location-based unlock when the
+    -- live GUID matches. A moved/reused slot must never select another copy.
+    local location = C_Item and read(C_Item.GetItemLocation, guidToRelease)
+    local matches = location and read(C_Item.DoesItemExist, location) == true
+        and guid(read(C_Item.GetItemGUID, location)) == guidToRelease
+    if matches and read(C_Item.IsLocked, location) == false then
+        self.held[guidToRelease], self.releases[guidToRelease] = nil, nil
+        return
+    end
+    request = { state = "waiting", deadline = GetTime() + 2 }
+    self.releases[guidToRelease] = request
+    self.releasing = true -- Unlock notifications can arrive synchronously.
+    local ok
+    if matches and type(C_Item.UnlockItem) == "function" then
+        request.method = "location"
+        ok = pcall(C_Item.UnlockItem, location)
+    end
+    if not ok and C_Item and type(C_Item.UnlockItemByGUID) == "function" then
+        request.method = "GUID"
+        ok = pcall(C_Item.UnlockItemByGUID, guidToRelease)
+    end
+    self.releasing = false
+    if not ok then request.state = "error"; return end
+    self:VerifyRelease(guidToRelease, request)
 end
 
 function Protection:RiskyContext()
@@ -89,7 +159,7 @@ end
 function Protection:SyncHolds()
     -- Lock/unlock calls can emit ITEM_LOCK_CHANGED before they return. This
     -- guard prevents nested synchronization from acquiring/releasing twice.
-    if self.syncing then return end
+    if self.syncing or self.releasing then return end
     self.syncing = true
     local enabled = A.IsEnabled() and not self.stopping
     self.holdsAvailable = C_Item and type(C_Item.GetItemLocation) == "function"
@@ -112,6 +182,9 @@ function Protection:SyncHolds()
                             self:Release(itemGUID)
                         elseif read(C_Item.IsLocked, location) == false then
                             -- Set ownership before potentially synchronous events.
+                            -- Invalidate an earlier release check so its callback
+                            -- cannot discard this new hold after a context opens.
+                            if self.releases then self.releases[itemGUID] = nil end
                             self.held[itemGUID] = true
                             local ok = pcall(C_Item.LockItem, location)
                             if not ok or read(C_Item.IsLocked, location) ~= true then
@@ -316,6 +389,7 @@ end
 function Protection:Stop()
     -- Logout releases our native holds while keeping saved marks for next login.
     self.stopping = true
+    self.cursorCheck = nil
     self:MerchantClosed()
     self:SyncHolds()
 end

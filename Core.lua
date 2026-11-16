@@ -2,7 +2,7 @@
 -- Modules share state through A; Blizzard's named entry points use globals.
 local addonName, A = ...
 A.name = addonName
-A.version = "1.0.3"
+A.version = "1.0.4"
 -- SavedVariables format version, independent of the addon release number.
 A.schema = 2
 A.states = { locked = "Locked", junk = "Junk", mail = "Mail" }

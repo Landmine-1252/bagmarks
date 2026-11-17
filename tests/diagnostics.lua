@@ -43,7 +43,7 @@ return function(M, A, test, eq, mark)
         sleeping()
         M.item("Item-PrivateNormalCopy", 0, 2, { itemID = 211527, spellID = 429961 })
         mark("Item-PrivateOther", 0, 3, "mail", { itemID = 6948, spellID = 8690 })
-        A.db.recipient = "PrivateRecipient-PrivateRealm"
+        A.char.recipient = "PrivateRecipient-PrivateRealm"
         local report = A.Diagnostics:Report(211527)
         contains(report, "Readable items matching 211527: 2")
         contains(report, "slot=1; mark=Locked"); contains(report, "slot=2; mark=Normal")

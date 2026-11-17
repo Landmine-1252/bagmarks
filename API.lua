@@ -141,6 +141,18 @@ function API:SellPrice(item)
     end
 end
 
+-- Match the backpack and equipped-bag exclusions used by Blizzard's Sell All Junk.
+function API:BagAllowsJunkSale(bag)
+    if not Enum or not Enum.BagIndex then return end
+    local ok, excluded
+    if bag == Enum.BagIndex.Backpack then
+        ok, excluded = pcall(C_Container.GetBackpackSellJunkDisabled)
+    elseif Enum.BagSlotFlags then
+        ok, excluded = pcall(C_Container.GetBagSlotFlag, bag, Enum.BagSlotFlags.ExcludeJunkSell)
+    end
+    if ok and A.Safe(excluded) and type(excluded) == "boolean" then return not excluded end
+end
+
 function API:CanMail(item)
     -- Conservative: soulbound, account-bound, quest, refundable and unknown items are manual-only.
     if item.bound ~= false or not C_Item.IsBound or not C_Item.IsItemBindToAccount then return false end
@@ -158,15 +170,21 @@ function API:MerchantReady()
         and not (SpellIsTargeting and SpellIsTargeting())
 end
 
+function API:ComposeOpen()
+    return A.CanAct() and A.mailOpen and SendMailFrame and SendMailFrame:IsVisible()
+        and self:MailInteractionActive() ~= false
+end
+
 function API:MailReady()
-    return A.CanAct() and A.mailOpen and SendMailFrame and SendMailFrame:IsShown()
-        and not GetCursorInfo() and type(ClickSendMailItemButton) == "function"
+    return self:ComposeOpen() and not GetCursorInfo() and type(GetSendMailItem) == "function"
+        and type(ClickSendMailItemButton) == "function"
         and type(HasSendMailItem) == "function" and type(ATTACHMENTS_MAX_SEND) == "number"
 end
 
 function API:FreeAttachment()
     if not HasSendMailItem or not ATTACHMENTS_MAX_SEND then return end
     for i = 1, ATTACHMENTS_MAX_SEND do
-        if not HasSendMailItem(i) then return i end
+        local occupied = HasSendMailItem(i)
+        if A.Safe(occupied) and not occupied then return i end
     end
 end

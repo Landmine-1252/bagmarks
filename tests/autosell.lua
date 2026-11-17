@@ -95,6 +95,39 @@ return function(M, A, test, eq, mark)
         eq(M.bags[0][2].guid, "Item-Replacement")
     end)
 
+    for _, mode in ipairs({ "automatic", "manual" }) do
+        test(mode .. " sale skips stacks already taken or held by another seller and continues", function()
+            for slot = 1, 4 do mark("Item-Sale" .. slot, 0, slot, "junk", { itemID = 100 + slot }) end
+            if mode == "automatic" then enable() end
+            openMerchant()
+            if mode == "automatic" then M.tick(.2)
+            else A.Operations:PreviewJunk(); A.UI.confirm.accept:Fire("OnClick") end
+            eq(M.sold[1], "Item-Sale1")
+            M.bags[0][2] = nil
+            local replacement = M.item("Item-Replacement", 0, 2, { itemID = 102 })
+            M.bags[0][3].busy = true
+            event("MERCHANT_UPDATE"); event("BAG_UPDATE_DELAYED"); M.tick(1)
+            eq(M.saleAttempts, 2); eq(M.sold[2], "Item-Sale4"); eq(M.bags[0][2], replacement)
+            eq(M.bags[0][3].busy, true); eq(A.Operations.job, nil)
+            assert(M.messages[#M.messages]:find("Skipped 2", 1, true))
+        end)
+    end
+
+    test("manual and automatic sellers respect Blizzard backpack and bag junk exclusions", function()
+        mark("Item-Backpack", 0, 1, "junk"); mark("Item-Bag", 1, 1, "junk")
+        mark("Item-Allowed", 2, 1, "junk"); mark("Item-Unknown", 3, 1, "junk")
+        M.excludedBags[0], M.excludedBags[1], M.excludedBags[3] = true, true, M.secret
+        openMerchant()
+        local preview, skipped = A.Operations:CollectJunk(12)
+        eq(#preview, 1); eq(preview[1].guid, "Item-Allowed"); eq(skipped, 3)
+        A.Operations:PreviewJunk()
+        M.excludedBags[2] = true
+        A.UI.confirm.accept:Fire("OnClick"); M.tick(1); eq(M.saleAttempts, 0)
+        closeMerchant(); M.excludedBags[1] = false
+        enable(); openMerchant(); M.tick(1)
+        eq(#M.sold, 1); eq(M.sold[1], "Item-Bag"); eq(M.saleAttempts, 1)
+    end)
+
     for _, change in ipairs({ "count", "price" }) do
         test("automatic queue stops when a captured stack's " .. change .. " changes", function()
             enable(); local second = twoItems(); openMerchant(); M.tick(.2)

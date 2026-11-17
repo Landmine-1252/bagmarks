@@ -85,7 +85,10 @@ function Frame:IsForbidden() return false end
 function Frame:SetEnabled(value) self.enabled = value end
 function Frame:SetChecked(value) self.checked = value end
 function Frame:GetChecked() return self.checked end
-function Frame:SetText(value) self.text = value end
+function Frame:SetText(value)
+    self.text = value
+    if self.kind == "EditBox" then self:Fire("OnTextChanged", false) end
+end
 function Frame:GetText() return self.text or "" end
 function Frame:GetStringHeight() return 15 * select(2, self:GetText():gsub("\n", "")) + 15 end
 function Frame:SetJustifyH(value) self.justifyH = value end
@@ -159,12 +162,14 @@ MerchantSellAllJunkButton = newFrame("Button", "MerchantSellAllJunkButton", Merc
 SendMailFrame = newFrame("Frame", "SendMailFrame", UIParent)
 SendMailFrame:Hide()
 SendMailNameEditBox = newFrame("EditBox", "SendMailNameEditBox", SendMailFrame)
+SendMailSubjectEditBox = newFrame("EditBox", "SendMailSubjectEditBox", SendMailFrame)
 BankFrame = newFrame("Frame", "BankFrame", UIParent)
 BankFrame.BankPanel = newFrame("Frame", nil, BankFrame)
 BankFrame:Hide()
 UISpecialFrames, SlashCmdList = {}, {}
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, message) M.messages[#M.messages + 1] = message end }
 Enum = { BagIndex = { Backpack = 0, Bag_1 = 1, Bag_2 = 2, Bag_3 = 3, Bag_4 = 4, ReagentBag = 5 },
+    BagSlotFlags = { ExcludeJunkSell = 64 },
     BankType = { Character = 0, Account = 2 }, TooltipDataType = { Item = 0 },
     PlayerInteractionType = { MailInfo = 17 } }
 C_PlayerInteractionManager = { IsInteractingWithNpcOfType = function(kind)
@@ -177,9 +182,15 @@ end }
 C_Bank = { FetchPurchasedBankTabData = function(bankType)
     return { { ID = bankType == 0 and 6 or 15 } }
 end }
+C_MerchantFrame = { SellAllJunkItems = function() if M.bulkSale then M.bulkSale() end end }
 ItemLocation = { CreateFromBagAndSlot = function(_, bag, slot) return { bag = bag, slot = slot } end }
 local function at(bag, slot) return M.bags[bag] and M.bags[bag][slot] end
 C_Container = {
+    GetBackpackSellJunkDisabled = function() return M.excludedBags[0] or false end,
+    GetBagSlotFlag = function(bag, flag)
+        assert(bag ~= 0 and flag == Enum.BagSlotFlags.ExcludeJunkSell)
+        return M.excludedBags[bag] or false
+    end,
     GetContainerNumSlots = function(bag) return M.bags[bag] and 32 or 0 end,
     GetContainerItemInfo = function(bag, slot)
         M.reads = (M.reads or 0) + 1
@@ -341,7 +352,11 @@ ATTACHMENTS_MAX_SEND = 12
 function HasSendMailItem(index) return M.attachments[index] ~= nil end
 function GetSendMailItem(index)
     local i = M.attachments[index]
-    if i then return "Test item", i.itemID, 1, i.count, 1 end
+    if i then
+        local name = i.name or "Test item"
+        if i.uncached then name = nil end
+        return name, i.itemID, 1, i.count, 1
+    end
 end
 function ClickSendMailItemButton(index, clear)
     if clear then
@@ -405,6 +420,7 @@ function BuybackItem(index)
     end
 end
 function SendMail() error("BagMarks must never send mail") end
+function SendMailFrame_SendMail() assert(M.playerSending, "Send requires a player click") end
 function DeleteCursorItem() error("BagMarks must never destroy an item") end
 function GetTime() return M.time end
 function GetCoinTextureString(value) return value .. " copper" end
@@ -540,7 +556,7 @@ end
 
 function M.reset(A)
     M.A, M.bags, M.info, M.attachments, M.messages, M.sold, M.timers = A, {}, {}, {}, {}, {}, {}
-    M.equipped = {}
+    M.equipped, M.excludedBags = {}, {}
     M.time, M.bindings, M.overrides, M.bindingSet, M.savedBindingSet = 0, {}, nil, 1, nil
     M.cursor, M.rejectSale, M.rejectMail, M.combat, M.alt, M.ctrl, M.shift, M.targeting, M.failKey = nil, nil, nil, false, false, false, false, false, nil
     M.containers, M.bankButtons, M.reads = {}, {}, 0
@@ -556,6 +572,7 @@ function M.reset(A)
     M.tradeItems, M.cancelTradeCalls, M.failCancelTrade = {}, 0, false
     M.secretTooltip, M.secretTooltipGUID, M.missingTooltipGUID = false, false, false
     M.buyback, M.buybacks, M.money, M.secretPrice, M.failBuyback, M.rejectBuyback, M.reentrantBuyback = {}, {}, 10000, false, false, false, false
+    M.bulkSale = nil
     for key, value in pairs(A.Protection) do
         if type(value) ~= "function" then A.Protection[key] = nil end
     end
@@ -580,6 +597,8 @@ function M.reset(A)
     if A.Diagnostics.frame then A.Diagnostics.frame:Hide() end
     MerchantFrame:Hide(); SendMailFrame:Hide(); BankFrame:Hide()
     SendMailNameEditBox:SetText("")
+    SendMailSubjectEditBox:SetText("")
+    SendMailFrame.previousItem = nil
     SendMailFrame.sendMode, SendMailNameEditBox.focus, SendMailNameEditBox.highlighted = nil, false, false
     local mini = A.Minimap
     mini:StopDrag()

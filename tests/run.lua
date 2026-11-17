@@ -29,7 +29,7 @@ local function merchant()
 end
 local function mail()
     SendMailFrame:Show()
-    A.mailOpen = true
+    A.eventFrame:Fire("OnEvent", "MAIL_SHOW")
 end
 local function confirm()
     assert(A.UI.confirm and A.UI.confirm:IsShown(), "expected confirmation")
@@ -127,7 +127,7 @@ test("corrupt settings sanitize and schema zero migrates", function()
     BagMarksDB = { theme = "wrong", enabled = "yes", angle = 0/0, recipient = "  Name|\n  " }
     BagMarksCharDB = { marks = { [123] = "locked", ["Item-A"] = "locked", ["Item-X"] = { state = "bad" } }, observed = "broken" }
     A.Store:Initialize()
-    eq(A.db.theme, "Colorful"); eq(A.db.enabled, true); eq(A.db.angle, 220); eq(A.db.recipient, "Name")
+    eq(A.db.theme, "Colorful"); eq(A.db.enabled, true); eq(A.db.angle, 220); eq(A.db.previousRecipient, "Name"); eq(A.char.recipient, "")
     eq(A.Store:Get("Item-A"), "locked"); eq(A.Store:Get("Item-X"), nil); eq(A.char.marks[123], nil)
 end)
 
@@ -506,7 +506,7 @@ test("closing merchant invalidates an old preview", function()
 end)
 
 test("mail helper attaches only eligible Mail, keeps marks, and fills empty recipient", function()
-    mail(); A.db.recipient = "Alt-Realm"
+    mail(); A.char.recipient = "Alt-Realm"
     mark("Item-L", 0, 1, "locked"); mark("Item-J", 0, 2, "junk")
     mark("Item-M", 0, 3, "mail"); mark("Item-B", 0, 4, "mail", { itemID = 102, bound = true })
     mark("Item-A", 0, 5, "mail", { itemID = 103, account = true })
@@ -518,7 +518,7 @@ test("mail helper attaches only eligible Mail, keeps marks, and fills empty reci
 end)
 
 test("mail attachment limit preserves existing attachments and remaining marked items", function()
-    mail(); SendMailNameEditBox:SetText("Chosen-Realm"); A.db.recipient = "Default"
+    mail(); SendMailNameEditBox:SetText("Chosen-Realm"); A.char.recipient = "Default"
     for i = 1, 11 do M.attachments[i] = { itemID = 99, count = 1 } end
     mark("Item-A", 0, 1, "mail"); mark("Item-B", 0, 2, "mail")
     A.Operations:AttachMail(); M.tick(1)
@@ -622,10 +622,10 @@ test("schema one migration preserves disabled settings and supplies new defaults
         modifier = "SHIFT", recipient = "Bankalt-Realm", theme = "Minimal" }
     BagMarksCharDB = { schema = 1, marks = { ["Item-L"] = { state = "locked", itemID = 100 } } }
     A.Store:Initialize()
-    eq(A.db.schema, 2); eq(A.char.schema, 2)
+    eq(A.db.schema, 4); eq(A.char.schema, 4)
     eq(A.db.enabled, false); eq(A.db.minimap, false); eq(A.db.tooltips, false); eq(A.db.overlays, false)
     eq(A.db.mouseButton, "RightButton"); eq(A.db.markingAction, "menu"); eq(A.db.autoFillRecipient, true)
-    eq(A.db.modifier, "SHIFT"); eq(A.db.recipient, "Bankalt-Realm"); eq(A.Store:Get("Item-L"), "locked")
+    eq(A.db.modifier, "SHIFT"); eq(A.db.previousRecipient, "Bankalt-Realm"); eq(A.char.recipient, ""); eq(A.Store:Get("Item-L"), "locked")
 end)
 
 test("new options persist and invalid input preferences recover safely", function()
@@ -753,7 +753,7 @@ test("tabbed settings expose input choices and cancel hidden key capture", funct
 end)
 
 test("recipient fills on opening Send Mail before attaching anything", function()
-    A.db.recipient = "Bankalt-Realm"
+    A.char.recipient = "Bankalt-Realm"
     A.eventFrame:Fire("OnEvent", "MAIL_SHOW"); M.tick(0)
     eq(SendMailNameEditBox:GetText(), "")
     SendMailNameEditBox.focus = true; SendMailFrame:Show(); M.tick(0)
@@ -762,7 +762,7 @@ test("recipient fills on opening Send Mail before attaching anything", function(
 end)
 
 test("automatic recipient fill preserves an existing name and replies", function()
-    A.db.recipient = "Default-Realm"
+    A.char.recipient = "Default-Realm"
     A.eventFrame:Fire("OnEvent", "MAIL_SHOW"); SendMailNameEditBox:SetText("Chosen-Realm")
     SendMailFrame:Show(); M.tick(0); eq(SendMailNameEditBox:GetText(), "Chosen-Realm")
     SendMailFrame:Hide(); SendMailNameEditBox:SetText(""); SendMailFrame.sendMode = "reply"
@@ -770,7 +770,7 @@ test("automatic recipient fill preserves an existing name and replies", function
 end)
 
 test("recipient typing before deferred autofill and deliberate clearing are respected", function()
-    A.db.recipient = "Default-Realm"
+    A.char.recipient = "Default-Realm"
     A.eventFrame:Fire("OnEvent", "MAIL_SHOW"); SendMailFrame:Show()
     SendMailNameEditBox:SetText("Manual"); SendMailNameEditBox:Fire("OnTextChanged", true)
     M.tick(0); eq(SendMailNameEditBox:GetText(), "Manual")
@@ -782,7 +782,7 @@ test("recipient typing before deferred autofill and deliberate clearing are resp
 end)
 
 test("successful send starts a new default recipient after Blizzard resets the form", function()
-    A.db.recipient = "Default-Realm"; mail()
+    A.char.recipient = "Default-Realm"; mail()
     SendMailNameEditBox:SetText("Manual"); SendMailNameEditBox:Fire("OnTextChanged", true)
     A.eventFrame:Fire("OnEvent", "MAIL_SEND_SUCCESS")
     SendMailNameEditBox:SetText(""); SendMailNameEditBox.focus = true -- Blizzard's event handler may run after ours.
@@ -793,7 +793,7 @@ test("successful send starts a new default recipient after Blizzard resets the f
 end)
 
 test("autofill can be disabled and queued fills cannot outlive the mailbox", function()
-    A.db.recipient, A.db.autoFillRecipient = "Default-Realm", false
+    A.char.recipient, A.db.autoFillRecipient = "Default-Realm", false
     A.eventFrame:Fire("OnEvent", "MAIL_SHOW"); SendMailFrame:Show(); M.tick(0)
     eq(SendMailNameEditBox:GetText(), "")
     A.SetOption("autoFillRecipient", true)
@@ -815,7 +815,7 @@ test("changing the default only fills an empty unedited compose field after edit
 end)
 
 test("sending during an attachment queue does not attach leftovers to the next draft", function()
-    mail(); A.db.recipient = "Bankalt-Realm"
+    mail(); A.char.recipient = "Bankalt-Realm"
     mark("Item-A", 0, 1, "mail"); mark("Item-B", 0, 2, "mail")
     A.Operations:AttachMail(); eq(M.attachments[1].guid, "Item-A")
     A.eventFrame:Fire("OnEvent", "MAIL_SEND_SUCCESS")
@@ -900,6 +900,9 @@ dofile("tests/hold_release.lua")(M, A, test, eq, mark)
 dofile("tests/sort_cursor.lua")(M, A, test, eq, mark)
 dofile("tests/reusable.lua")(M, A, test, eq, mark)
 dofile("tests/mail_context.lua")(M, A, test, eq, mark)
+dofile("tests/mail_compose.lua")(M, A, test, eq, mark)
+dofile("tests/mail_characters.lua")(M, A, test, eq, mark)
+dofile("tests/item_memory.lua")(M, A, test, eq, mark)
 dofile("tests/autosell.lua")(M, A, test, eq, mark)
 dofile("tests/combat_icons.lua")(M, A, test, eq, mark)
 dofile("tests/hover.lua")(M, A, test, eq, mark)

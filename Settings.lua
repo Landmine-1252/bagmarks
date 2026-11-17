@@ -55,8 +55,10 @@ function SettingsUI:Create()
     check(general, "minimap", "Show minimap button", -30)
     local autoSell = check(general, "autoSellJunk", "Automatically sell marked junk", -60)
     UI.Tip(autoSell, "Automatic junk selling", "Starting with your next merchant visit, sell eligible items you marked as Junk without a confirmation. Locked, Mail, and unmarked items are excluded. Turn this off to stop remaining automatic sales.")
+    local remember = check(general, "rememberItemTypes", "Remember Mail and Junk by item type", -90)
+    UI.Tip(remember, "Remember item types", "Each character remembers its own Mail and Junk choices. An item you mail to an alt follows that alt's rules when collected. Clear Mark forgets that item type for this character.")
     UI.Label(general, "Mail", 0, -121, "GameFontNormal")
-    UI.Label(general, "Default recipient", 0, -159)
+    UI.Label(general, "This character's recipient", 0, -159)
     local recipient = CreateFrame("EditBox", nil, general, "InputBoxTemplate")
     recipient:SetSize(192, 24)
     recipient:SetPoint("TOPLEFT", 178, -152)
@@ -65,15 +67,31 @@ function SettingsUI:Create()
     recipient:SetScript("OnEnterPressed", function(widget) widget:ClearFocus() end)
     recipient:SetScript("OnEscapePressed", function(widget) widget:ClearFocus() end)
     recipient:SetScript("OnTextChanged", function(widget, userInput)
-        if userInput and not A.readOnly then A.db.recipient = widget:GetText():gsub("[%c|]", ""):match("^%s*(.-)%s*$") end
+        if userInput then
+            A.Store:SetRecipient(widget:GetText())
+            self:RefreshRecipient()
+        end
     end)
     -- Defer compose autofill until editing finishes, so a partly typed saved
     -- recipient cannot be copied into an already open mail draft.
-    recipient:SetScript("OnEditFocusLost", function() A.Mail:QueueFill() end)
-    UI.Tip(recipient, "Mail recipient", "Character or Character-Realm. Auto-fill uses this name only for a new, empty recipient. Replies and names you type are preserved.")
+    recipient:SetScript("OnEditFocusLost", function()
+        self:RefreshRecipient()
+        A.Mail:QueueDraftUpdate()
+    end)
+    UI.Tip(recipient, "Default mail recipient", "Enter Character or Character-Realm for this sender. BagMarks fills an empty To field once per fresh draft. You can type over the selected name.")
     self.recipient = recipient
+    self.usePreviousRecipient = UI.Button(general, "Use previous recipient", 168, 202, -118, function()
+        if A.readOnly or A.char.recipient ~= "" or not A.db.previousRecipient then return end
+        recipient:ClearFocus()
+        A.SetOption("recipient", A.db.previousRecipient)
+        A.db.previousRecipient = nil
+    end)
+    UI.Tip(self.usePreviousRecipient, "Previous account recipient", function()
+        return "Use " .. (A.db.previousRecipient or "") .. " as this character's default To name."
+    end)
     check(general, "autoFillRecipient", "Automatically fill mail recipient", -194)
-    local mailNote = UI.Label(general, "Fills when Send Mail opens and after a successful send.\nExisting recipients and your edits are preserved.\n\nReview the recipient before using Blizzard's Send button.", 0, -234, "GameFontHighlightSmall")
+    check(general, "autoAttachMail", "Automatically attach marked items", -224)
+    local mailNote = UI.Label(general, "Open Send Mail to attach eligible Mail stacks.\nThe first attachment supplies an empty subject.\nReview the recipient and items, then click Send.", 0, -262, "GameFontHighlightSmall")
     mailNote:SetWidth(370)
     mailNote:SetJustifyH("LEFT")
 
@@ -183,6 +201,12 @@ function SettingsUI:SetBindingMessage(message)
     if self.bindingMessage then self.bindingMessage:SetText(message) end
 end
 
+function SettingsUI:RefreshRecipient()
+    -- Preserve the caret and any partially typed name during bag and UI refreshes.
+    if not self.recipient:HasFocus() then self.recipient:SetText(A.char.recipient) end
+    self.usePreviousRecipient:SetShown(not A.readOnly and A.char.recipient == "" and A.db.previousRecipient ~= nil)
+end
+
 function SettingsUI:Refresh()
     if not self.frame then return end
     for key, check in pairs(self.checks) do check:SetChecked(A.db[key]); check:SetEnabled(not A.readOnly) end
@@ -199,9 +223,7 @@ function SettingsUI:Refresh()
         or "Full item icon uses a translucent mark so the item\nartwork stays visible. Small corner is the default.")
     self.interactionHint:SetText(A.Interaction:Hint() .. (A.db.markingAction == "cycle"
         and "\nNormal > Locked > Junk > Mail > Normal" or "\nChoose a mark from the compact item menu."))
-    -- Refreshes also come from bag events. Preserve text/caret while the user
-    -- edits instead of replacing their input with the sanitized saved value.
-    if not self.recipient:HasFocus() then self.recipient:SetText(A.db.recipient) end
+    self:RefreshRecipient()
     local hovering = self.bindingAction == A.Bindings.hoverAction
     self.bindingChoice:SetText(hovering and "Cycle hovered item" or "Toggle marking mode")
     self.bindingChoice:SetEnabled(menuEnabled)

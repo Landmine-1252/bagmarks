@@ -17,7 +17,7 @@ function Ops:Eligible(item, state)
     -- A mark alone is insufficient: busy, changed, quest, refundable, and
     -- otherwise ineligible items must also stay out of every automated path.
     if not A.Store:Eligible(item, state) or A.API:IsQuest(item) or A.API:Refundable(item) then return false end
-    if state == "junk" then return A.API:SellPrice(item) ~= nil end
+    if state == "junk" then return A.API:BagAllowsJunkSale(item.bag) and A.API:SellPrice(item) ~= nil end
     return state == "mail" and A.API:CanMail(item)
 end
 
@@ -40,9 +40,10 @@ function Ops:CollectJunk(limit)
     return preview, skipped, total
 end
 
-function Ops:CancelAutoSale()
-    self.autoSalePending = nil
-    if self.job and self.job.automatic then self:Cancel() end
+function Ops:CancelAutomatic(kind)
+    if kind == "junk" then self.autoSalePending = nil
+    elseif A.Mail.pending then A.Mail.pending.attach = nil end
+    if self.job and self.job.kind == kind and self.job.automatic then self:Cancel(nil, kind) end
 end
 
 function Ops:AutoSellJunk()
@@ -68,7 +69,7 @@ function Ops:PreviewJunk()
     if self.job then return end
     self.autoSalePending = nil -- A deliberate preview takes priority over a delayed auto-sale.
     local preview, skipped, total = self:CollectJunk(12)
-    if #preview == 0 then A.Print("No eligible marked junk. Changed stacks, busy, unsellable, quest and refundable items are skipped."); return end
+    if #preview == 0 then A.Print("No eligible marked junk. Check bag sale exclusions, stack changes, busy items and vendor eligibility."); return end
     local lines = { "Sell these marked stacks? (Up to 12 per batch.)", "" }
     for _, item in ipairs(preview) do
         lines[#lines + 1] = (item.link or ("Item " .. item.itemID)) .. " x" .. item.count
@@ -85,12 +86,18 @@ function Ops:PreviewJunk()
     end)
 end
 
-function Ops:AttachMail()
-    if not A.API:MailReady() then A.Print("Open Send Mail with an empty cursor, outside combat."); return end
+function Ops:AttachMail(automatic)
+    A.Mail.attachAttempted = true
+    if not A.API:MailReady() then
+        if not automatic then A.Print("Open Send Mail with an empty cursor, outside combat.") end
+        return
+    end
     if self.job then return end
     self.autoSalePending = nil
-    if not A.API:FreeAttachment() then A.Print("All mail attachment slots are occupied."); return end
-    A.Mail:FillRecipient()
+    if not A.API:FreeAttachment() then
+        if not automatic then A.Print("All mail attachment slots are occupied.") end
+        return
+    end
     A.Store:RefreshInventory()
     local items = A.API:Scan(false)
     local entries = {}
@@ -99,19 +106,24 @@ function Ops:AttachMail()
             entries[#entries + 1] = { guid = item.guid, count = item.count, itemID = item.itemID }
         end
     end
-    if #entries == 0 then A.Print("No eligible Mail items. Bound, quest, refundable, busy and changed stacks are skipped."); return end
-    self.job = { kind = "mail", entries = entries, index = 1, completed = 0 }
+    if #entries == 0 then
+        if not automatic then A.Print("No eligible Mail items. Bound, quest, refundable, busy and changed stacks are skipped.") end
+        return
+    end
+    self.job = { kind = "mail", automatic = automatic, entries = entries, index = 1, completed = 0 }
     self:Step()
 end
 
-function Ops:Cancel(message)
-    local active = self.job ~= nil
-    self.autoSalePending = nil
-    self.job = nil
-    -- Old confirmation callbacks retain this number; changing it invalidates
-    -- their authority to start a sale after the context has closed or changed.
-    self.generation = (self.generation or 0) + 1
-    A.UI:CloseConfirmation()
+function Ops:Cancel(message, kind)
+    local active = self.job and (not kind or self.job.kind == kind)
+    if active then self.job = nil end
+    if kind ~= "mail" then
+        self.autoSalePending = nil
+        -- A sale confirmation from a previous visit must never sell at this merchant.
+        self.generation = (self.generation or 0) + 1
+        A.UI:CloseConfirmation()
+    end
+    if kind ~= "junk" and A.Mail.pending then A.Mail.pending.attach = nil end
     self:RefreshButtons()
     if active and message then A.Print(message) end
 end
@@ -123,22 +135,39 @@ function Ops:Finish()
     if job and job.kind == "mail" then
         A.Print(job.completed .. " stack(s) attached. Review the recipient and attachments, then use Blizzard's Send button.")
     elseif job then
-        A.Print(job.completed .. " marked stack(s) sold.")
+        local skipped = job.skipped and (" Skipped " .. job.skipped .. " moved or busy stack(s).") or ""
+        A.Print(job.completed .. " marked stack(s) sold." .. skipped)
     end
+end
+
+local function jobReady(job)
+    if job.kind == "mail" then
+        return A.API:MailReady() and (not job.automatic or (A.db.autoAttachMail and SendMailFrame.sendMode ~= "reply"))
+    end
+    return A.API:MerchantReady() and (not job.automatic or A.db.autoSellJunk)
 end
 
 function Ops:Step()
     local job = self.job
     if not job then return end
-    local ready = job.kind == "junk" and A.API:MerchantReady() or job.kind == "mail" and A.API:MailReady()
-    if not ready or (job.automatic and not A.db.autoSellJunk) then
+    if not jobReady(job) then
         self:Cancel("Operation stopped. Remaining markings were kept."); return
     end
     if job.kind == "mail" and not A.API:FreeAttachment() then self:Finish(); return end
     A.Store:RefreshInventory()
     local entry = job.entries[job.index]
     if not entry then self:Finish(); return end
-    local item = A.API:Find(entry.guid, false)
+    local items = A.API:Scan(false)
+    local item = items[entry.guid]
+    -- Another seller can claim a captured stack while the previous sale settles.
+    -- Skip its GUID. Never use a replacement at the captured bag slot.
+    while job.kind == "junk" and A.Store:Get(entry.guid) == "junk" and (not item or item.busy) do
+        job.skipped = (job.skipped or 0) + 1
+        job.index = job.index + 1
+        entry = job.entries[job.index]
+        if not entry then self:Finish(); return end
+        item = items[entry.guid]
+    end
     -- Revalidate identity, mark, size and eligibility immediately before every action.
     if not item or item.itemID ~= entry.itemID or item.count ~= entry.count or not self:Eligible(item, job.kind)
         or (job.kind == "junk" and A.API:SellPrice(item) ~= entry.price) then
@@ -181,18 +210,22 @@ end
 function Ops:Poll()
     local job = self.job
     if not job or not job.pending then return end
-    local ready = job.kind == "junk" and A.API:MerchantReady() or job.kind == "mail" and A.API:MailReady()
-    if not ready or (job.automatic and not A.db.autoSellJunk) then
+    if not jobReady(job) then
         self:Cancel("Operation stopped. Remaining markings were kept."); return
     end
-    local present = A.API:Find(job.pending.guid, false)
-    -- Observe the GUID leaving carried bags. Mail also needs the expected
-    -- item type/count in the chosen attachment slot; pcall alone proves none
-    -- of this. Timeout stops the queue instead of retrying an uncertain action.
-    local complete = not present
+    local complete
     if job.kind == "mail" then
-        local name, itemID, _, count = GetSendMailItem(job.attachment)
-        complete = complete and name ~= nil and itemID == job.pending.itemID and count == job.pending.count
+        local _, itemID, _, count = GetSendMailItem(job.attachment)
+        if A.Safe(itemID) and A.Safe(count) and itemID == job.pending.itemID and count == job.pending.count then
+            -- An attached stack can still occupy a locked bag slot. Prefer its
+            -- actual attachment GUID; without one, wait for it to leave the bags.
+            local guid = C_TooltipInfo and A.Protection:TooltipGUID(C_TooltipInfo.GetSendMailItem, job.attachment)
+            if guid then complete = guid == job.pending.guid
+            else complete = not A.API:Find(job.pending.guid, false) end
+        end
+        if complete then A.Mail:QueueDraftUpdate() end
+    else
+        complete = not A.API:Find(job.pending.guid, false)
     end
     if complete then
         -- Mail marks remain even after success: removing attachments or failed sends
@@ -223,7 +256,8 @@ function Ops:RefreshButtons()
             local carried = {}
             for _, id in ipairs(A.API:BagIDs(false)) do carried[id] = true end
             for guid, item in pairs(A.inventory or {}) do
-                if carried[item.bag] and item.quality == 0 and A.Store:Get(guid) == "locked" then
+                if carried[item.bag] and item.quality == 0 and A.Protection:GuardsMark(A.Store:Get(guid))
+                    and A.API:BagAllowsJunkSale(item.bag) ~= false then
                     block = true
                     break
                 end
@@ -237,13 +271,13 @@ function Ops:CreateButtons()
     if A.InCombat() then return end
     if MerchantFrame and not self.sellButton then
         self.sellButton = A.UI.Button(MerchantFrame, "Sell Marked Junk", 150, 0, 0, function()
-            if self.job and self.job.automatic then
+            if self.job and self.job.kind == "junk" and self.job.automatic then
                 self:Cancel("Automatic sale stopped. Remaining markings were kept.")
             else self:PreviewJunk() end
         end)
         self.sellButton:ClearAllPoints()
         self.sellButton:SetPoint("TOPLEFT", MerchantFrame, "BOTTOMLEFT", 14, -3)
-        A.UI.Tip(self.sellButton, "Sell Marked Junk", "Preview up to 12 explicitly marked stacks. Locked, Mail and uncertain stacks are excluded. During an automatic sale, click Stop Selling to keep the remaining items.")
+        A.UI.Tip(self.sellButton, "Sell Marked Junk", "Preview up to 12 Junk stacks in bags that allow junk selling. During an automatic sale, click Stop Selling to keep the remaining items.")
     end
     if SendMailFrame and not self.mailButton then
         self.mailButton = A.UI.Button(SendMailFrame, "Attach Marked Items", 160, 0, 0, function() self:AttachMail() end)
@@ -261,9 +295,9 @@ function Ops:CreateButtons()
         guard:EnableMouse(true)
         guard:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         guard:SetScript("OnClick", function()
-            A.Print("A poor-quality item is Locked. Use Sell Marked Junk or clear its mark first.")
+            A.Print("A poor-quality item is marked Mail or Locked. Use Sell Marked Junk to sell your Junk stacks.")
         end)
-        A.UI.Tip(guard, "BagMarks: Locked junk", "Blizzard's Sell All Junk would include a Locked item. Use Sell Marked Junk to review an explicit selection.")
+        A.UI.Tip(guard, "BagMarks: Protected junk", "Blizzard's Sell All Junk could include a Mail or Locked item. Use Sell Marked Junk to review your Junk stacks.")
         MerchantSellAllJunkButton:HookScript("OnHide", function() guard:Hide() end)
         self.nativeJunkGuard = guard
     end

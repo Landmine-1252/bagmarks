@@ -24,7 +24,7 @@ function UI.Tip(widget, title, body)
     widget:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(title)
-        GameTooltip:AddLine(body, .9, .9, .9, true)
+        GameTooltip:AddLine(type(body) == "function" and body() or body, .9, .9, .9, true)
         GameTooltip:Show()
     end)
     widget:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -90,6 +90,8 @@ end
 
 function UI:ItemChoices(root, item)
     local guid = item.guid
+    local rule = A.db.rememberItemTypes and A.char.itemRules[item.itemID]
+    if rule then root:CreateTitle("Future copies will be marked " .. A.states[rule]) end
     if A.char.review[guid] then root:CreateTitle("Stack changed. Reapply a mark to review.") end
     local choices = {
         { "Lock Item", "locked" }, { "Mark as Junk", "junk" },

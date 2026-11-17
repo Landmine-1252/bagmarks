@@ -1,4 +1,4 @@
--- Account preferences and per-character GUID marks are persisted separately.
+-- Each character owns its GUID marks, learned item types and default recipient.
 -- observed records the last inventory snapshot; review blocks automation for
 -- a stack whose contents may have changed until the player reapplies a mark.
 local _, A = ...
@@ -8,8 +8,14 @@ A.Store = Store
 local function tableOrEmpty(value) return type(value) == "table" and value or {} end
 local function validGUID(value) return type(value) == "string" and value:match("^Item%-") end
 local function finite(value) return type(value) == "number" and value == value and math.abs(value) < math.huge end
+local function validItemID(value) return finite(value) and value > 0 and value % 1 == 0 end
+local function recipientName(value)
+    if type(value) ~= "string" then return "" end
+    return value:gsub("[%c|]", ""):sub(1, 100):match("^%s*(.-)%s*$")
+end
 
 function Store:Initialize()
+    self.baselineBeforeRules = nil
     local account, character = tableOrEmpty(BagMarksDB), tableOrEmpty(BagMarksCharDB)
     -- Never downgrade unknown future data. Leave the SavedVariables intact for the newer addon.
     A.readOnly = (finite(account.schema) and account.schema > A.schema)
@@ -27,8 +33,14 @@ function Store:Initialize()
     if not A.Interaction.buttonLabels[db.mouseButton] then db.mouseButton = A.defaults.mouseButton end
     if not A.Interaction.actionLabels[db.markingAction] then db.markingAction = A.defaults.markingAction end
     db.angle = finite(db.angle) and db.angle % 360 or A.defaults.angle
-    db.recipient = db.recipient:gsub("[%c|]", ""):sub(1, 100):match("^%s*(.-)%s*$")
-    local char = { schema = A.schema, marks = {}, observed = {}, review = {} }
+    -- The old shared address has no recorded sender. Keep it available for explicit import.
+    local previousRecipient = recipientName(account.previousRecipient or account.recipient)
+    if previousRecipient ~= "" then db.previousRecipient = previousRecipient end
+    local char = { schema = A.schema, recipient = recipientName(character.recipient),
+        marks = {}, observed = {}, review = {}, itemRules = {} }
+    for id, state in pairs(tableOrEmpty(character.itemRules)) do
+        if validItemID(id) and (state == "mail" or state == "junk") then char.itemRules[id] = state end
+    end
     for guid, record in pairs(tableOrEmpty(character.marks)) do
         -- Schema 0 stored GUID -> state. This migration never introduces an item-ID fallback.
         if type(record) == "string" then record = { state = record } end
@@ -49,6 +61,10 @@ function Store:Initialize()
     if not A.readOnly then BagMarksDB, BagMarksCharDB = db, char end
 end
 
+function Store:SetRecipient(value)
+    if not A.readOnly then A.char.recipient = recipientName(value) end
+end
+
 function Store:Get(guid)
     -- No record means Normal; keeping it absent also makes Clear Mark explicit.
     local record = guid and A.char.marks[guid]
@@ -61,30 +77,49 @@ function Store:Set(item, state)
     -- An explicit menu/cycle choice acknowledges the current stack contents.
     A.char.review[item.guid] = nil
     A.char.observed[item.guid] = { itemID = item.itemID, count = item.count, bag = item.bag }
+    -- Record the other copies already present before teaching a new rule.
     self:RefreshInventory()
+    if A.db.rememberItemTypes and state ~= "locked" and validItemID(item.itemID) then
+        A.char.itemRules[item.itemID] = state or nil -- Clear Mark also forgets the type.
+    end
     A.Refresh()
     return true
 end
 
--- GUIDs have no documented split/merge lineage. Never transfer a state by item ID.
--- A growing stack could contain units from a marked stack. Quarantine that GUID
--- from automation until the player explicitly reviews/reapplies its mark.
+-- An explicit type rule can mark a new carried stack or newly acquired units.
+-- A conflicting split/merge still needs review because the client gives no lineage.
 function Store:Reconcile(items, scope)
     if A.readOnly then return end
     local previous, diminished = A.char.observed, {}
+    local carried, rules = {}, A.char.itemRules
+    if A.db.rememberItemTypes and not self.baselineBeforeRules and next(rules) then
+        for _, bag in ipairs(A.API:BagIDs(false)) do carried[bag] = true end
+    end
     for guid, old in pairs(previous) do
-        if scope[old.bag] and (self:Get(guid) or A.char.review[guid]) then
+        local state = self:Get(guid)
+        if scope[old.bag] and (state or A.char.review[guid]) then
             local current = items[guid]
-            if not current or current.count < old.count then diminished[old.itemID] = true end
+            if not current or current.count < old.count then
+                local source = diminished[old.itemID]
+                -- true records an uncertain or mixed source, even if another source agrees.
+                if A.char.review[guid] or (source and source ~= state) then diminished[old.itemID] = true
+                else diminished[old.itemID] = state end
+            end
         end
     end
     for guid, item in pairs(items) do
         local old = previous[guid]
-        -- Matching item IDs only raise a review flag here. They never copy a
-        -- Locked/Junk/Mail mark from one GUID to another.
-        -- Also quarantine marked stacks that grew while their source was not observable.
-        if (not old or item.count > old.count) and (diminished[item.itemID] or (old and self:Get(guid))) then
-            A.char.review[guid] = true
+        local rule = carried[item.bag] and rules[item.itemID]
+        local growing = old and item.count > old.count
+        if not old or growing or (rule and not carried[old.bag]) then
+            local state, source = self:Get(guid), diminished[item.itemID]
+            if rule and (not state or state == rule) and (not source or source == rule) then
+                if not state and not A.char.review[guid] then
+                    A.char.marks[guid] = { state = rule, itemID = item.itemID }
+                end
+            elseif source or (growing and state) then
+                A.char.review[guid] = true
+            end
         end
     end
     local nextObserved = {}
@@ -96,6 +131,7 @@ function Store:Reconcile(items, scope)
         nextObserved[guid] = { itemID = item.itemID, count = item.count, bag = item.bag }
     end
     A.char.observed = nextObserved
+    if next(scope) then self.baselineBeforeRules = nil end
 end
 
 function Store:RefreshInventory()
@@ -112,6 +148,7 @@ end
 function Store:ResetSettings()
     if A.readOnly then return end
     for key, value in pairs(A.defaults) do A.db[key] = value end
+    A.char.recipient = ""
     A.mode = false
     A.Operations:Cancel()
     A.Refresh()

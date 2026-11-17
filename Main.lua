@@ -25,7 +25,7 @@ local function closeMail()
     A.mailOpen = false
     A.Mail:Close()
     if wasOpen then
-        A.Operations:Cancel()
+        A.Operations:Cancel(nil, "mail")
         A.Refresh() -- Release our reusable-item holds only after every risk ends.
     end
 end
@@ -46,7 +46,7 @@ function A.Slash(message)
     elseif command == "debug" then A.Diagnostics:Open(message:match("^%s*%S+%s*(.-)%s*$"))
     elseif command == "reset" then
         local shortcut = A.Interaction.modifierLabels[A.defaults.modifier] .. " + " .. A.Interaction.buttonLabels[A.defaults.mouseButton]
-        A.UI:Confirm("Reset BagMarks settings", "Restore default preferences?\n\nItem marks and Blizzard keybindings will be kept.\n\nDefault theme: " .. A.defaults.theme .. "\nDefault shortcut: " .. shortcut, "Reset settings", function() A.Store:ResetSettings() end)
+        A.UI:Confirm("Reset BagMarks settings", "Restore account preferences and clear this character's default recipient?\n\nItem marks, remembered item types and Blizzard keybindings will be kept.\n\nDefault theme: " .. A.defaults.theme .. "\nDefault shortcut: " .. shortcut, "Reset settings", function() A.Store:ResetSettings() end)
     else
         A.Print("/bm or /bagmarks: Settings; /bm mode: Marking mode; /bm minimap: Minimap button; /bm theme: Cycle themes; /bm reset: Reset preferences; /bm debug or /bmcheck: Copyable diagnostics; /bm help: This reference.")
     end
@@ -68,6 +68,7 @@ local function initialize()
     A.Diagnostics:Create()
     A.Hover:Create()
     A.Settings:RegisterCategory()
+    A.Protection:ObserveBulkSales()
     A.Mail:InstallHooks()
     A.Operations:CreateButtons()
     if A.readOnly then A.Print("Saved data belongs to a newer version. BagMarks is inactive and has preserved it.")
@@ -108,22 +109,22 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         A.Refresh()
     elseif event == "PLAYER_REGEN_ENABLED" then
         A.Operations:CreateButtons()
-        A.Mail:QueueFill()
+        A.Mail:QueueDraftUpdate()
         queueRefresh()
     elseif event == "MERCHANT_SHOW" then
         -- Start automatic selling once per opening, not on every merchant event.
         local opening = not A.merchantOpen
         A.merchantOpen = true
-        A.Protection:SyncHolds() -- Protect reusable items before deferred UI/sale work.
         if opening then A.Protection:MerchantOpened() end
         A.Store:RefreshInventory()
+        A.Protection:SyncHolds() -- Include newly acquired stacks with remembered Mail marks.
         A.Operations:CreateButtons()
         queueRefresh()
         if opening then A.Operations:AutoSellJunk() end
     elseif event == "MERCHANT_CLOSED" then
         A.merchantOpen = false
         A.Protection:MerchantClosed()
-        A.Operations:Cancel()
+        A.Operations:Cancel(nil, "junk")
         A.Refresh()
     elseif event == "MERCHANT_UPDATE" then
         A.Protection:CheckBuyback()
@@ -139,10 +140,11 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
     elseif event == "TRADE_PLAYER_ITEM_CHANGED" or event == "TRADE_ACCEPT_UPDATE" or event == "TRADE_UPDATE" then
         A.Protection:CheckTrade()
     elseif event == "MAIL_SHOW" then
+        local opening = not A.mailOpen
         A.mailOpen = true
         A.Protection:Refresh()
         A.Mail:InstallHooks()
-        A.Mail:NewDraft()
+        if opening and A.mailOpen then A.Mail:NewDraft(true) end
         A.Operations:CreateButtons()
         queueRefresh()
     elseif event == "MAIL_CLOSED" then
@@ -157,10 +159,11 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
             if A.mailOpen then C_Timer.After(0, reconcileMail) end
         end
     elseif event == "MAIL_SEND_SUCCESS" then
-        A.Operations:Cancel()
+        A.Operations:Cancel(nil, "mail")
         A.Mail:NewDraft()
     elseif event == "MAIL_SEND_INFO_UPDATE" then
         A.Protection:CheckMail()
+        A.Mail:QueueDraftUpdate()
         queueRefresh()
     elseif event == "BANKFRAME_OPENED" then
         A.bankOpen = true
@@ -185,6 +188,13 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
     elseif event == "UI_ERROR_MESSAGE" then
         if A.Operations.job then A.Operations:Cancel("The client reported an error. Remaining markings were kept.") end
     else
+        if A.Mail.provisionalSubject and (event == "GET_ITEM_INFO_RECEIVED" or event == "ITEM_DATA_LOAD_RESULT") then
+            A.Mail:QueueDraftUpdate()
+        end
+        if event == "BAG_UPDATE_DELAYED" and A.merchantOpen and A.db.rememberItemTypes and next(A.char.itemRules) then
+            -- Reserve newly acquired Mail stacks before other sellers' deferred passes.
+            A.Store:RefreshInventory()
+        end
         if event == "ITEM_LOCK_CHANGED" or event == "BAG_UPDATE_DELAYED" then A.Protection:SyncHolds() end
         if event == "BAG_UPDATE_DELAYED" then A.Protection:CheckBuyback() end
         queueRefresh()

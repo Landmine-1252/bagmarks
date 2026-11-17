@@ -2,16 +2,17 @@
 -- Modules share state through A; Blizzard's named entry points use globals.
 local addonName, A = ...
 A.name = addonName
-A.version = "1.0.4"
+A.version = "1.0.5"
 -- SavedVariables format version, independent of the addon release number.
-A.schema = 2
+A.schema = 4
 A.states = { locked = "Locked", junk = "Junk", mail = "Mail" }
 -- Store.lua fills missing/invalid options from these values and keeps valid
 -- saved choices, including shortcuts selected before a default changed.
 A.defaults = {
     enabled = true, minimap = true, tooltips = true, overlays = true, iconSize = "corner",
     modifier = "CTRL-SHIFT", mouseButton = "RightButton", markingAction = "menu",
-    recipient = "", autoFillRecipient = true, autoSellJunk = false, theme = "Colorful", angle = 220,
+    autoFillRecipient = true, autoAttachMail = true, autoSellJunk = false, theme = "Colorful", angle = 220,
+    rememberItemTypes = false,
 }
 A.mode = false -- Intentionally session-only, to avoid surprising right clicks after login.
 
@@ -62,12 +63,17 @@ end
 
 function A.SetOption(key, value)
     if A.readOnly then return end
-    A.db[key] = value
+    if key == "rememberItemTypes" and value and not A.db.rememberItemTypes then
+        A.Store.baselineBeforeRules = true
+        A.Store:RefreshInventory() -- Baseline the copies already in the bags before resuming rules.
+    end
+    if key == "recipient" then A.Store:SetRecipient(value) else A.db[key] = value end
     if key == "enabled" and not value then
         A.mode = false
         A.Operations:Cancel()
     end
-    if key == "autoSellJunk" and not value then A.Operations:CancelAutoSale() end
-    if key == "autoFillRecipient" or key == "recipient" then A.Mail:QueueFill() end
+    if key == "autoSellJunk" and not value then A.Operations:CancelAutomatic("junk") end
+    if key == "autoAttachMail" and not value then A.Operations:CancelAutomatic("mail") end
+    if key == "autoFillRecipient" or key == "recipient" then A.Mail:QueueDraftUpdate() end
     A.Refresh()
 end

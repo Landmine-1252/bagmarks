@@ -109,7 +109,7 @@ return function(M, A, test, eq, mark)
 
     test("mailbox cleanup cancels pending autofill and does not release foreign holds", function()
         local sleeping = mark("Item-SleepingBag", 0, 1, "locked", { itemID = 211527, spellID = 429961, held = true })
-        A.db.recipient = "Example"
+        A.char.recipient = "Example"
         openMail(); assert(A.Mail.pending)
         M.mailActive = false; poll(); M.tick(0)
         eq(A.Mail.pending, nil); eq(SendMailNameEditBox:GetText(), "")

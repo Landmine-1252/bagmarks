@@ -1,5 +1,14 @@
 # BagMarks Changelog
 
+## 1.0.5 - Per-character mail, remembered items and junk selling
+
+- Opening **Send Mail** automatically attaches eligible **Mail** stacks up to the available slots. Turn off **Automatically attach marked items** in General to attach them manually.
+- Fill an empty subject from the first attachment, including its stack count. Keep custom subjects and reply drafts intact.
+- Save a default **To** name for each character and fill it once per fresh draft, including after a successful send. Switching tabs preserves recipient edits and removed attachments. To keep an old shared address, choose **Use previous recipient** in General on the character that should use it.
+- Enable **General → Remember Mail and Junk by item type** to mark future copies on that character. The option starts off. Mail your tailoring supplies from your blacksmith and your tailor can keep them for crafting. **Clear Mark** forgets a type for the current character.
+- Reserve Mail stacks at merchants, respect WoW's bag sale exclusions and continue selling eligible Junk when another seller takes a queued stack.
+- Give native bulk sellers time to finish before recovering a protected stack from buyback. BagMarks verifies the exact item and makes at most one purchase attempt per stack per visit.
+
 ## 1.0.4 - Keep Locked items usable
 
 ### Changed

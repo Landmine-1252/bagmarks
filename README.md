@@ -23,13 +23,17 @@ From left to right: **Mail**, **Junk**, **Locked**, and **Normal** (unmarked), u
 
 The menu checks your current mark. Repeat the shortcut to change or clear it. Identical copies keep separate marks.
 
+To mark future copies automatically, enable **General → Remember Mail and Junk by item type**. It starts off. Mark a **Light Feather** for Mail once and the next feathers you pick up on that character get the Mail mark, including feathers added to an existing stack. Junk works the same way. Each character has its own rules. If your blacksmith marks Linen Cloth for Mail, your tailor can collect that cloth and keep it for crafting.
+
+While remembering is on, choosing Mail or Junk changes the rule for future copies. **Clear Mark** forgets that item type. **Locked** protects just the selected stack. Turning remembering off pauses the rules and keeps your existing marks.
+
 ## Configure BagMarks
 
 Type **`/bm`** or **`/bagmarks`**, or **Left Click** the minimap button, to open settings.
 
 | Tab | What you can change |
 | --- | --- |
-| **General** | Enable BagMarks, show the minimap button, set up automatic junk selling, and configure mail autofill |
+| **General** | Enable BagMarks, show the minimap button, remember item types, and configure junk sales and mail drafts |
 | **Marking** | Choose mouse controls, a key to cycle the hovered item, and a key to toggle Item Marking Mode |
 | **Appearance** | Choose small or full-size marks, toggle icons and tooltip labels, and preview three icon themes |
 
@@ -59,19 +63,22 @@ Visit a merchant, click **Sell Marked Junk**, and confirm the preview of up to 1
 
 Enable **General → Automatically sell marked junk** to sell without confirmation from your next merchant visit. This starts **off**. Click **Stop Selling** to keep remaining items. Locked, Mail, and unmarked items are excluded.
 
+You can leave automatic selling off and keep using your usual junk seller. BagMarks respects WoW's bag sale exclusions, reserves Mail and Locked stacks at merchants, and skips Junk stacks another seller has already taken. If a seller bypasses a hold, BagMarks tries to buy back that exact stack once while the merchant is open. A full buyback list or a seller that takes it again can still require manual recovery.
+
 ## Mail marked items
 
-1. In **General**, enter a **Default recipient**, using `Character` or `Character-Realm`.
-2. Enable **Automatically fill mail recipient** (on by default). It fills empty recipients and preserves replies and typed names.
-3. At a mailbox, open **Send Mail** and click **Attach Marked Items**.
-4. Review the recipient and attachments, then click Blizzard's **Send** button yourself.
+1. Mark the stacks you want to mail, then open **Send Mail** at the mailbox. BagMarks attaches eligible stacks to free slots. The first attachment supplies a blank subject, including the quantity for a stack.
+2. Enter the recipient, or set **General → This character's recipient** using `Character` or `Character-Realm`. With **Automatically fill mail recipient** enabled, each fresh draft starts with this sender's saved name. Type over it to choose someone else.
+3. Review the recipient, subject and attachments, then click Blizzard's **Send**. Use **Attach Marked Items** for another batch.
 
-The helper attaches eligible **Mail** items while space remains. Bound items are skipped; unsent items keep their marks.
+**Automatically attach marked items** starts on. Turn it off in **General** to use the button manually. BagMarks skips replies when attaching automatically, preserves custom subjects, and keeps the marks on unsent items.
+
+If you had a shared default recipient in an older version, open **General** on the character that should use it. Hover over **Use previous recipient** to see the name, then click to save it for that character.
 
 ## A few things to know
 
 - **Locked items:** Equip, use, sort, and move them normally. Consumables can still be consumed. Clear the mark before selling, mailing, trading, or deleting them. Close merchant, mail, trade, and auction windows and finish item targeting before ordinary use. Some actions and addons bypass protection; see the [protection limits](docs/API_COMPATIBILITY.md).
-- **Saved choices:** Settings are shared across characters; marks belong to each character and follow bag movements. Check marks after splitting or merging stacks.
+- Each character keeps its own item marks, remembered item types and default mail recipient. The switches for remembering, autofill and automatic attachment apply across the account.
 - **Combat:** Marking, keybinding changes, and sale/mail helpers pause. Settings remain accessible. Existing icons stay visible when readable; new slots may wait until combat ends.
 - **EllesmereUI Bags:** Keep the icon column visible in List view. Combined stacks let you choose which individual stack to mark.
 
@@ -83,7 +90,7 @@ The helper attaches eligible **Mail** items while space remains. Bound items are
 | `/bm mode` | Toggle Item Marking Mode |
 | `/bm minimap` | Show or hide the minimap button |
 | `/bm theme` | Cycle icon themes |
-| `/bm reset` | Reset settings after confirmation; keep marks and keybindings |
+| `/bm reset` | Restore default preferences and keep marks, remembered item types and keybindings |
 | `/bm debug` or `/bmcheck` | Open a copyable status report |
 | `/bm help` | Show the command list |
 

@@ -1,4 +1,4 @@
-"""Version and release-note checks used by local builds and tag-triggered CI."""
+"""Version and release-note checks used by local builds and published-release CI."""
 import contextlib
 import io
 from pathlib import Path

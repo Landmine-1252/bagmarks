@@ -22,76 +22,23 @@ The result is **`dist/BagMarks-1.1.0.zip`**. The command runs static checks, the
 
 ## Release from GitHub
 
-[Build and release](../.github/workflows/release.yml) runs automatically when a version tag such as `1.1.0` is pushed. It tests and builds the tagged addon, then publishes a GitHub release with the installable ZIP attached after the checks pass. Ordinary commits and pull requests do not start the workflow. The manual **Run workflow** button remains available for releases and retries.
+1. Update `BagMarks.toc`, `Core.lua`, and `CHANGELOG.md` for the new version. Commit and push the changes to `main`, including the release workflow.
+2. Create and push a plain version tag such as `1.1.1` at that commit. You can leave the tag there until you are ready to release.
+3. On GitHub, open **Releases → Draft a new release**, select the existing tag, and enter the title and release notes.
+4. Click **Publish release** to start CI. Follow **Build and release** on the **Actions** tab. [Release workflow](../.github/workflows/release.yml)
 
-First commit and push the workflow, build scripts, and addon changes to the repository's default branch, `main`. The workflow must be on that branch for GitHub to show its manual run button.
+The workflow subscribes only to `release.published`. It tests the tagged commit, checks that the tag matches the addon version and changelog, and builds the installable ZIP. After the checks pass, it attaches the ZIP to the published GitHub release and uploads the same build to CurseForge with that version’s changelog. Published prereleases appear as Beta on CurseForge. [GitHub release events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#release)
 
-To release entirely through the GitHub website:
+### One-time setup
 
-1. Open the repository's **Actions** tab.
-2. Select **Build and release** in the sidebar.
-3. Click **Run workflow** and choose **main**, or the branch containing the version you want to release.
-4. Enter **`1.1.0`** in the version field.
-5. Click **Run workflow** to start the checks and release build.
+- Save a CurseForge API token under **Settings → Secrets and variables → Actions → New repository secret** as `CURSEFORGE_TOKEN`. The GitHub release asset uses the built-in workflow token. [CurseForge API tokens](https://www.curseforge.com/account/api-tokens)
+- Disable or delete the old direct CurseForge packaging webhook in **Settings → Webhooks**. Revoke its old token. The new workflow uploads directly to BagMarks project **1806693** for **WoW Forever 1.60.1**. [CurseForge Upload API](https://support.curseforge.com/support/solutions/articles/9000197321-curseforge-upload-api)
 
-This uses GitHub's [manual workflow form](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow). For a new version, the workflow tests the selected branch's commit, creates its version tag, uploads the ZIP, and publishes the release. If that tag already exists, the workflow builds the tagged addon files using the updated release workflow from the selected branch. This lets you repair publishing after `main` has advanced, while keeping the release tied to its original source. The workflow never moves tags. Failed checks create neither a tag nor a release.
+### Retry an upload
 
-The Actions form can handle the whole release. If you already used GitHub's **Releases → Draft a new release** form, run this workflow for the same version to attach its addon ZIP. Existing titles and notes are preserved. An interrupted draft is published after its ZIP is verified.
+Open the original publication run in **Actions** and choose **Re-run failed jobs**. The GitHub job verifies an existing ZIP by size and SHA-256. If the repository uses immutable releases, attach the locally built ZIP to the draft before publishing so CI can verify it. [GitHub release immutability](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)
 
-You can also keep using terminal tags. From the committed version you want to release:
-
-```sh
-git tag -a 1.1.0 -m "BagMarks 1.1.0"
-git push origin 1.1.0
-```
-
-Use a plain `major.minor.patch` tag, such as **`1.1.0`**, without a `v` prefix or prerelease suffix. The tag must match the versions in `BagMarks.toc` and `Core.lua`, and there must be a nonempty `## 1.1.0` section in `CHANGELOG.md`. The workflow stops if these disagree. The README is a player guide and needs no version update. The workflow does not change version numbers for you.
-
-After the checks pass, the workflow creates or completes the version's entry on the repository's **Releases** page and attaches **`BagMarks-1.1.0.zip`**. New release titles use **BagMarks 1.1.0**. New release notes come from that version's changelog section, with documentation links pointing to the same tag. Download the named addon ZIP from the release assets for installation or CurseForge submission; GitHub's automatic source archives contain the repository.
-
-Follow the run in the repository's **Actions** tab. Builds run with read access, and only the publishing job receives `contents: write`. The workflow uses GitHub's automatic token, so no personal access token or new repository secret is needed. GitHub Actions must be enabled, and any organization policy must allow the publishing job's permission. The official checkout and artifact actions are pinned to verified commit hashes.
-
-Only a pushed version tag or an explicit manual release request can publish. The publishing job uses the exact artifact produced by its successful build and verifies the tag's commit. The release tools are tested from the workflow's own commit before an existing tag is checked out. Only the manual path may create a missing tag; the push path refuses to recreate a tag removed during the build. Publishing is serialized per version. Existing ZIPs are checked by size and SHA-256, downloading the asset if GitHub has no digest. Matching assets need no upload; different or incomplete assets stop publishing for review. No asset is automatically deleted or replaced.
-
-### Retry the failed 1.0.0 release
-
-The November 15 run built and downloaded the addon successfully, then failed with **“a release with the same tag name already exists: 1.0.0.”** The existing release can be completed without deleting it or moving its tag.
-
-These recovery steps rebuild the original **1.0.0** source. To publish the current changes, use **1.1.0** as described above.
-
-1. Commit and push the updated workflow and release tools to **main**.
-2. Open **Actions → Build and release → Run workflow**.
-3. Choose **main**, enter **`1.0.0`**, and start a new run.
-4. Once it succeeds, open the existing **1.0.0** release and download **`BagMarks-1.0.0.zip`**.
-
-Start a new manual run after a workflow fix. GitHub's **Re-run failed jobs** button uses the original run's workflow and commit, so it would repeat the old publishing error. See GitHub's [rerun behavior](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
-
-For later retries, the workflow attaches a missing ZIP, verifies an existing ZIP, or completes an interrupted draft. An [immutable published release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) can only be verified; GitHub does not allow adding a missing asset to it. The workflow reports that case without changing the release. The corrected publication path has offline regression coverage and still needs a successful hosted run.
-
-This workflow publishes to GitHub. Configure automatic CurseForge packaging below to also create CurseForge files from new tags, or upload the tested ZIP manually. GitHub's [tag-trigger documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push), [release command reference](https://cli.github.com/manual/gh_release_create), and [asset upload reference](https://cli.github.com/manual/gh_release_upload) describe the GitHub publication behavior used here.
-
-## Automatic CurseForge packaging
-
-The repository URL `https://github.com/Landmine-1252/bagmarks` is correct. CurseForge also needs a GitHub webhook to receive tag notifications. Follow its [automatic packaging guide](https://support.curseforge.com/support/solutions/articles/9000197281-automatic-packaging):
-
-1. In the CurseForge project's repository settings, enable packaging for **tagged commits only**. Leave packaging of all commits disabled to avoid alpha files from ordinary commits.
-2. Copy the numeric **Project ID** from the project's Overview page, under **About This Project**.
-3. Create a token on your [CurseForge API tokens page](https://www.curseforge.com/account/api-tokens), with a name such as `BagMarks packaging`.
-4. Open [BagMarks on GitHub](https://github.com/Landmine-1252/bagmarks), then **Settings → Webhooks → Add webhook**. Use the following **Payload URL**, replacing both placeholders with your project ID and token:
-
-   ```text
-   https://www.curseforge.com/api/projects/PROJECT_ID/package?token=YOUR_CURSEFORGE_TOKEN
-   ```
-
-5. Keep **Just the push event** selected and **Active** checked. Leave the remaining settings at their defaults, as CurseForge instructs, and save the webhook. Enter the token directly in these private webhook settings; do not commit it to the repository.
-
-The repository's [.pkgmeta](../.pkgmeta) tells CurseForge to use the `BagMarks` folder, include the Markdown changelog, and omit tests, build tools, original artwork sources, and `dist`. Runtime icons, the license, and documentation remain included. CurseForge receives the full committed `CHANGELOG.md`, with the newest entry first. See the [PackageMeta reference](https://support.curseforge.com/support/solutions/articles/9000197952-preparing-the-packagemeta-file).
-
-Commit and push `.pkgmeta` before creating the next version tag. In GitHub's **Releases → Draft a new release** form, choose a **new** tag matching the committed addon version and target the commit containing those changes. Publishing that release creates the tag. An existing tag keeps its original files, so it will not pick up a newly added `.pkgmeta`. Use the next version if the current one has already been released.
-
-Check **Settings → Webhooks → your CurseForge webhook → Recent deliveries** for a successful tag push with a `refs/tags/` reference. GitHub exposes the request and response in its [delivery details](https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/viewing-webhook-deliveries). Then check CurseForge for the generated file and its processing status. A successful webhook delivery does not itself confirm a successful build or approval.
-
-CurseForge builds directly from the tagged source. It does not upload `dist/BagMarks-1.1.0.zip`, run our build script, or wait for GitHub Actions tests. Run `make package` before tagging. The GitHub release workflow continues independently. CurseForge's game-version checks and approval still apply; confirm that the project supports **Forever 1.60.1 / Interface 16001** if packaging fails.
+The CurseForge job reports the file ID after a successful upload and skips a previously successful upload on a rerun of that publication. If the connection dropped before it received a response, check the project’s files before retrying. [BagMarks files](https://www.curseforge.com/wow/addons/bagmarks/files/all)
 
 ## Manual upload to CurseForge
 

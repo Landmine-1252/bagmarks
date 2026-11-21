@@ -23,7 +23,14 @@ def download_asset(repository, asset_id):
     return result.stdout
 
 
-def find_release(repository, tag, api):
+def find_release(repository, tag, api, published_id=None):
+    if published_id is not None:
+        release = api(f"repos/{repository}/releases/{published_id}")
+        if (not isinstance(release, dict) or release.get("id") != published_id
+                or release.get("tag_name") != tag or release.get("draft") is not False
+                or not isinstance(release.get("assets"), list)):
+            raise ValueError("The published release no longer matches the event")
+        return release
     # Listing includes drafts with the publisher's write token. Failed requests
     # must propagate, never be mistaken for a release that does not exist.
     page = 1
@@ -71,7 +78,7 @@ def verify_asset(repository, asset, content, download):
 
 
 def publish_release(repository, tag, commit, archive, notes, create_tag=False,
-                    api=github_api, run=run_gh, download=download_asset):
+                    api=github_api, run=run_gh, download=download_asset, published_id=None):
     # Injectable API/CLI/download functions let the tests model real release
     # states and interrupted retries without writing anything to GitHub.
     archive, notes = Path(archive).resolve(), Path(notes).resolve()
@@ -88,7 +95,7 @@ def publish_release(repository, tag, commit, archive, notes, create_tag=False,
     # Validate local files first, then require the remote tag to identify the
     # tested commit. A matching version string alone does not prove provenance.
     ensure_tag(repository, tag, commit, create=create_tag, api=api)
-    release = find_release(repository, tag, api)
+    release = find_release(repository, tag, api, published_id)
     # A release created in GitHub's web UI may already exist without our ZIP.
     # Preserve its title/notes and finish only the missing publication steps.
     if release is None:
@@ -105,7 +112,7 @@ def publish_release(repository, tag, commit, archive, notes, create_tag=False,
             raise ValueError("This published release is immutable and has no addon ZIP; GitHub does not allow adding one")
         # No --clobber: a rerun must never delete an existing download.
         run(["release", "upload", tag, str(archive), "--repo", repository])
-        release = find_release(repository, tag, api)
+        release = find_release(repository, tag, api, published_id)
         asset = matching_asset(release, archive.name) if release is not None else None
         if asset is None:
             raise ValueError("Could not confirm the uploaded addon ZIP; retry to verify the release")
@@ -122,11 +129,13 @@ def main():
     parser.add_argument("--commit", required=True)
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--notes-file", type=Path, required=True)
-    parser.add_argument("--create-tag", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--create-tag", action="store_true")
+    mode.add_argument("--published-release-id", type=int, help="Attach to the already published release from this event")
     args = parser.parse_args()
     try:
         print(publish_release(args.repository, args.tag, args.commit, args.archive,
-                              args.notes_file, args.create_tag))
+                              args.notes_file, args.create_tag, published_id=args.published_release_id))
     except subprocess.CalledProcessError as error:
         detail = error.stderr or str(error)
         if isinstance(detail, bytes):

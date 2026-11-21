@@ -60,6 +60,8 @@ class ReleasePublishingTests(unittest.TestCase):
             self.assertEqual(payload, {"ref": "refs/tags/1.0.0", "sha": COMMIT})
             self.tag = {"ref": payload["ref"], "object": {"type": "commit", "sha": payload["sha"]}}
             return copy.deepcopy(self.tag)
+        if endpoint == f"repos/{REPOSITORY}/releases/123":
+            return copy.deepcopy(self.release)
         self.assertEqual(endpoint, f"repos/{REPOSITORY}/releases?per_page=100&page=1")
         return [copy.deepcopy(self.release)] if self.release is not None else []
 
@@ -258,6 +260,21 @@ class ReleasePublishingTests(unittest.TestCase):
             run_gh(["release", "upload", "1.0.0", str(self.archive), "--repo", REPOSITORY])
             self.assertEqual(run.call_args.args[0][0:4], ["gh", "release", "upload", "1.0.0"])
             self.assertTrue(run.call_args.kwargs["check"])
+
+    def test_published_event_uploads_once_and_verifies_the_same_release_on_retry(self):
+        self.publish(published_id=123)
+        self.publish(published_id=123)
+        self.assertEqual(self.operations(), ["upload"])
+        self.assertTrue(all("/releases?" not in call.args[0] for call in self.api.call_args_list))
+
+    def test_published_event_cannot_recreate_or_republish_a_release(self):
+        original = self.release
+        for release in (None, {**original, "draft": True}, {**original, "tag_name": "1.0.1"},
+                        {**original, "id": 456}):
+            self.release = release
+            with self.subTest(release=release), self.assertRaisesRegex(ValueError, "no longer matches"):
+                self.publish(published_id=123)
+            self.run.assert_not_called()
 
 
 if __name__ == "__main__":

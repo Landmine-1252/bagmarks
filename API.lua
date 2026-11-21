@@ -14,10 +14,9 @@ function API:Location(bag, slot)
     return ItemLocation:CreateFromBagAndSlot(bag, slot)
 end
 
-function API:Read(bag, slot, forDisplay)
-    -- Passive icons may read a live identity in combat. Operation reads and
-    -- scans stay suspended; unreadable data never falls back to a cached mark.
-    if not self.available or (A.InCombat() and not forDisplay) or not A.Safe(bag) or not A.Safe(slot)
+function API:Read(bag, slot, allowCombat)
+    -- Passive icons and explicit marking gestures need a live identity in combat.
+    if not self.available or (A.InCombat() and not allowCombat) or not A.Safe(bag) or not A.Safe(slot)
         or type(bag) ~= "number" or type(slot) ~= "number" then return end
     local ok, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
     if not ok or not A.Safe(info) or type(info) ~= "table" then return end
@@ -64,17 +63,17 @@ function API:BagIDs(includeBank)
     return ids
 end
 
-function API:Scan(includeBank)
+function API:Scan(includeBank, forMark)
     -- Return both the found GUIDs and the bags we could inspect. Store uses
     -- scope to distinguish a missing item from a bank that is merely closed.
     local items, scope = {}, {}
-    if not self.available or A.InCombat() then return items, scope end
+    if not self.available or (A.InCombat() and not forMark) then return items, scope end
     for _, bag in ipairs(self:BagIDs(includeBank)) do
         local ok, count = pcall(C_Container.GetContainerNumSlots, bag)
         if ok and A.Safe(count) and type(count) == "number" then
             scope[bag] = true
             for slot = 1, count do
-                local item = self:Read(bag, slot)
+                local item = self:Read(bag, slot, forMark)
                 if item then items[item.guid] = item end
             end
         end
@@ -82,10 +81,10 @@ function API:Scan(includeBank)
     return items, scope
 end
 
-function API:Find(guid, includeBank)
+function API:Find(guid, includeBank, forMark)
     -- Menus and queues can outlive a bag sort. Resolve the GUID again instead
     -- of trusting the location captured when the user started the action.
-    local items = self:Scan(includeBank)
+    local items = self:Scan(includeBank, forMark)
     return items[guid]
 end
 

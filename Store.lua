@@ -8,7 +8,7 @@ A.Store = Store
 local function tableOrEmpty(value) return type(value) == "table" and value or {} end
 local function validGUID(value) return type(value) == "string" and value:match("^Item%-") end
 local function finite(value) return type(value) == "number" and value == value and math.abs(value) < math.huge end
-local function validItemID(value) return finite(value) and value > 0 and value % 1 == 0 end
+local function validItemID(value) return finite(value) and value > 0 and value <= 2147483647 and value % 1 == 0 end
 local function recipientName(value)
     if type(value) ~= "string" then return "" end
     return value:gsub("[%c|]", ""):sub(1, 100):match("^%s*(.-)%s*$")
@@ -26,17 +26,48 @@ function Store:Initialize()
         -- A saved false is a choice, not a missing value. Do not use "or default".
         if type(value) == type(default) then db[key] = value else db[key] = default end
     end
-    if not ({ Classic = true, Minimal = true, Colorful = true })[db.theme] then db.theme = "Colorful" end
-    if db.iconSize ~= "corner" and db.iconSize ~= "full" then db.iconSize = A.defaults.iconSize end
+    if not A.Themes[db.theme] then db.theme = A.defaults.theme end
+    if not A.iconSizeLabels[db.iconSize] then db.iconSize = A.defaults.iconSize end
     -- Schema 1 already has the single modifier; new input/mail preferences get safe defaults.
     if not A.Interaction.modifierLabels[db.modifier] then db.modifier = A.defaults.modifier end
     if not A.Interaction.buttonLabels[db.mouseButton] then db.mouseButton = A.defaults.mouseButton end
     if not A.Interaction.actionLabels[db.markingAction] then db.markingAction = A.defaults.markingAction end
     db.angle = finite(db.angle) and db.angle % 360 or A.defaults.angle
     -- The old shared address has no recorded sender. Keep it available for explicit import.
-    local previousRecipient = recipientName(account.previousRecipient or account.recipient)
+    db.mailRoutes, db.itemRecipients, db.knownCharacters = {}, {}, {}
+    local legacy = tableOrEmpty(account.legacyRosterNames)
+    local repaired = {}
+    for old, name in pairs(legacy) do
+        if type(old) == "string" and recipientName(name) ~= "" and A.MailRoutes:LegacyRosterName(old) == name then
+            repaired[old] = name
+        end
+    end
+    for address, seen in pairs(tableOrEmpty(account.knownCharacters)) do
+        if seen == true and type(address) == "string" and recipientName(address) == address then
+            local fullName
+            if not finite(account.schema) or account.schema < 8 then fullName = A.MailRoutes:LegacyRosterName(address) end
+            if fullName then repaired[address] = fullName end
+            if address:find(" ", 1, true) or address:find("-", 1, true) then db.knownCharacters[fullName or address] = true end
+        end
+    end
+    -- Other senders' per-character saves are opened on their next login.
+    if next(repaired) then db.legacyRosterNames = repaired end
+    local function addressOf(value)
+        local name = recipientName(value)
+        return repaired[name] or name
+    end
+    local previousRecipient = addressOf(account.previousRecipient or account.recipient)
     if previousRecipient ~= "" then db.previousRecipient = previousRecipient end
-    local char = { schema = A.schema, recipient = recipientName(character.recipient),
+    local routes = tableOrEmpty(account.mailRoutes)
+    for key in pairs(A.MailRoutes.labels) do
+        local name = addressOf(routes[key])
+        if name ~= "" then db.mailRoutes[key] = name end
+    end
+    for id, address in pairs(tableOrEmpty(account.itemRecipients)) do
+        local name = addressOf(address)
+        if validItemID(id) and name ~= "" then db.itemRecipients[id] = name end
+    end
+    local char = { schema = A.schema, recipient = addressOf(character.recipient),
         marks = {}, observed = {}, review = {}, itemRules = {} }
     for id, state in pairs(tableOrEmpty(character.itemRules)) do
         if validItemID(id) and (state == "mail" or state == "junk") then char.itemRules[id] = state end
@@ -62,7 +93,33 @@ function Store:Initialize()
 end
 
 function Store:SetRecipient(value)
-    if not A.readOnly then A.char.recipient = recipientName(value) end
+    if A.readOnly then return end
+    A.char.recipient = recipientName(value)
+    A.Settings:RulesChanged()
+end
+
+function Store:SetMailRoute(key, value)
+    if A.readOnly then return end
+    local routes = A.db.mailRoutes
+    if type(key) == "number" then
+        if not validItemID(key) then return end
+        routes = A.db.itemRecipients
+    elseif not A.MailRoutes.labels[key] then
+        return
+    end
+    local name = recipientName(value)
+    if name == "" then
+        routes[key] = nil
+    elseif not A.MailRoutes:MatchesToField(name, routes[key]) then
+        local address = A.MailRoutes:Qualify(name)
+        if not address then
+            A.Print("Your character information is still loading. Try saving the recipient again in a moment.")
+            return false
+        end
+        routes[key] = address
+    end
+    A.Settings:RulesChanged()
+    return true
 end
 
 function Store:Get(guid)
@@ -71,16 +128,31 @@ function Store:Get(guid)
     return record and record.state or nil
 end
 
+-- Remembered marks apply to future acquisitions. Snapshot the matching stacks
+-- before changing the rule, including when the editor is used during combat.
+function Store:SetTypeRule(itemID, state)
+    if A.readOnly or not validItemID(itemID) or (state and state ~= "mail" and state ~= "junk") then return end
+    if A.char.itemRules[itemID] == state then return end
+    if state and A.db.rememberItemTypes then
+        for guid, copy in pairs(A.API:Scan(false, A.InCombat())) do
+            if copy.itemID == itemID then
+                A.char.observed[guid] = { itemID = itemID, count = copy.count, bag = copy.bag }
+            end
+        end
+    end
+    A.char.itemRules[itemID] = state
+    if A.Settings then A.Settings:RulesChanged() end
+end
+
 function Store:Set(item, state)
-    if not A.CanAct() or not item or (state and not A.states[state]) then return false end
+    if not A.IsEnabled() or not item or (state and not A.states[state]) then return false end
     A.char.marks[item.guid] = state and { state = state, itemID = item.itemID } or nil
     -- An explicit menu/cycle choice acknowledges the current stack contents.
     A.char.review[item.guid] = nil
     A.char.observed[item.guid] = { itemID = item.itemID, count = item.count, bag = item.bag }
-    -- Record the other copies already present before teaching a new rule.
     self:RefreshInventory()
     if A.db.rememberItemTypes and state ~= "locked" and validItemID(item.itemID) then
-        A.char.itemRules[item.itemID] = state or nil -- Clear Mark also forgets the type.
+        self:SetTypeRule(item.itemID, state or nil)
     end
     A.Refresh()
     return true
@@ -149,6 +221,8 @@ function Store:ResetSettings()
     if A.readOnly then return end
     for key, value in pairs(A.defaults) do A.db[key] = value end
     A.char.recipient = ""
+    A.db.mailRoutes, A.db.itemRecipients = {}, {}
+    A.Settings:RulesChanged()
     A.mode = false
     A.Operations:Cancel()
     A.Refresh()

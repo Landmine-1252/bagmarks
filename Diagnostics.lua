@@ -42,7 +42,7 @@ function Diagnostics:Report(itemID)
         "Enabled=" .. value(A.IsEnabled()) .. "; readOnly=" .. value(A.readOnly) .. "; itemAPI=" .. value(A.API.available),
         "MarkingMode=" .. value(A.mode) .. "; gestureActive=" .. value(read(A.Interaction.Active, A.Interaction)),
         "Controls=" .. A.Interaction:Hint(),
-        "Theme=" .. value(A.db.theme) .. "; markSize=" .. value(A.db.iconSize)
+        "Theme=" .. value(A.db.theme) .. "; markSize=" .. value(A.MarkSize())
             .. "; icons=" .. value(A.db.overlays) .. "; labels=" .. value(A.db.tooltips),
         "EllesmereRegistered=" .. value(A.Ellesmere.registered ~= nil),
         "EllesmereRefreshEnabled=" .. value(EUI_Bags and EUI_Bags.refreshEnabled),
@@ -57,7 +57,11 @@ function Diagnostics:Report(itemID)
             .. ", checks=" .. value(A.Protection.cursorChecks or 0) .. ", returns=" .. value(A.Protection.cursorReturns or 0),
         "AutoSell=" .. value(A.db.autoSellJunk) .. "; rememberItemTypes=" .. value(A.db.rememberItemTypes)
             .. "; mailAutofill=" .. value(A.db.autoFillRecipient)
-            .. "; recipientConfigured=" .. value(A.char.recipient ~= ""),
+            .. "; mailAutoAttach=" .. value(A.db.autoAttachMail)
+            .. "; recipientConfigured=" .. value(A.char.recipient ~= "" or next(A.db.mailRoutes) ~= nil or next(A.db.itemRecipients) ~= nil),
+        "Mail draft: senderKnown=" .. value(A.MailRoutes:PlayerAddress() ~= nil)
+            .. ", composeVisible=" .. value(SendMailFrame and SendMailFrame:IsVisible() or false)
+            .. ", waitingForSender=" .. value(A.Mail.pending and A.Mail.pending.waitingForSender or false),
     }
     if A.mailOpen and mailbox == false then
         lines[#lines + 1] = "Mailbox flag is stale: the client reports that mailing has ended."
@@ -127,7 +131,9 @@ end
 
 function Diagnostics:Create()
     if self.frame then return end
-    local f = A.UI.Window("BagMarksDiagnostics", "BagMarks diagnostics", 500, 390)
+    -- Lift the backdrop and all its children together, including when opened
+    -- over an item editor or another addon dialog.
+    local f = A.UI.Window("BagMarksDiagnostics", "BagMarks diagnostics", 500, 390, nil, "TOOLTIP")
     A.UI.Label(f, "Select all, then press Ctrl+C to copy this report.", 20, -42, "GameFontHighlightSmall")
     local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelInputScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 24, -72)
@@ -151,9 +157,11 @@ end
 
 function Diagnostics:Show(itemID)
     self:Create()
+    if A.Bindings.capture and A.Bindings.capture:IsShown() then A.Bindings:StopCapture() end
     self.itemID = itemID
     self.edit:SetText(self:Report(itemID))
     self.frame:Show()
+    self.frame:Raise()
     self.scroll:SetVerticalScroll(0)
 end
 

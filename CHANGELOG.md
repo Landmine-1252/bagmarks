@@ -1,5 +1,33 @@
 # BagMarks Changelog
 
+## 1.1.0 - Mail routing, item rules and new icon themes
+
+### Mail recipients
+
+- Set an **Account default** in **Mail** to use one bank alt across your account. A **Character override** takes priority only for mail sent by that character. Your saved 1.0.5 recipient becomes that character’s override. **Use previous recipient** is now on the Mail page.
+- Choose recipients for cloth, mining materials, herbs, leather and hides, cooking ingredients, and untranslated mage scrolls. Shared ingredients such as herbs used in tea go to their material recipient first. Ordinary stat scrolls use your default unless you give them an item rule.
+- Under **Profession recipes**, a profession’s recipient takes priority over **Recipe default**. With both blank, a tailoring pattern can follow **Cloth** or a cooking recipe can follow **Cooking**. Recipes without a matching recipient use your character or account default.
+- The character picker shows full names, so you can distinguish alts who share a first name. Saved recipients carry over, and settings, tooltips and drafts show the same name when you switch characters.
+- Hover over a Mail-marked stack to see its destination. At the mailbox, review and send one recipient’s stacks at a time. With automatic attachment on, sending a completed batch prepares the next letter. With recipient autofill off, enter a full name and choose **Attach Marked Items**. Items addressed to yourself or without a destination stay in your bags.
+
+### Item rules and settings
+
+- Open **Item rules** from the settings sidebar or a bag item’s menu to add, edit or remove a rule. A future Mail or Junk mark applies to the current character. An item-specific mail recipient applies account-wide and takes priority over category and default recipients.
+- Search by item name or ID and combine filters for future mark and mail recipient. You can find every rule for one alt or see which items inherit their destination from Mail settings. Each row shows the destination and how it was chosen. The page flags paused automatic marks.
+- **General** shows your active mouse shortcut and its action. The bag menu says **Clear mark and forget future mark** when clearing a stack also removes its rule for future copies.
+- Confirmation dialogs open above the settings and rule editor windows. Open **Diagnostics** from the sidebar to see its report, background and controls together above those windows.
+
+### Appearance and marking
+
+- Choose from eight new themes. **Border** outlines the entire item icon and **Circles** draws a solid dot at your chosen size. Both use gold for Locked, red for Junk and blue for Mail. The other six are Heraldry, Runic, Workshop, Ledger, Nautical and Postage.
+- **Appearance** previews all three marks on item artwork. **Medium corner** adds a size between Small corner and Full item icon. Revised outlines make the marks easier to read at small sizes.
+- Your configured mouse shortcut now works on identifiable stacks in combat, including **Shift + Left Click** to open the mark menu or cycle marks.
+
+### Mailbox fixes
+
+- Fixed an empty **To** field and missing attachments when Forever initially supplied only the sender’s first name. BagMarks resumes preparing the draft when the full name becomes available.
+- Fixed a delivered item lingering in the attachment slot and causing “Item not found” on a second send. Mouse and controller Send wait for the slot to clear. If you start writing another letter during cleanup, automatic batching pauses until you choose **Attach Marked Items**.
+
 ## 1.0.5 - Per-character mail, remembered items and junk selling
 
 - Opening **Send Mail** automatically attaches eligible **Mail** stacks up to the available slots. Turn off **Automatically attach marked items** in General to attach them manually.

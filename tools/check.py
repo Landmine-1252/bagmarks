@@ -53,13 +53,20 @@ for name, callback in expected.items():
     assert f"function {callback}(" in binding_code
     assert f"BINDING_NAME_{name}" in binding_code
     assert "key" not in binding.attrib, "Shortcuts must start unbound"
-for name, size in (("Lock", 32), ("Junk", 32), ("Mail", 32), ("BagMarks", 64)):
+themes = ("", "Heraldry", "Runic", "Workshop", "Ledger", "Nautical", "Postage")
+icons = [(theme + state, 32, 32) for theme in themes for state in ("Lock", "Junk", "Mail")]
+for name, expected_width, expected_height in [*icons, ("Border", 32, 32), ("Circles", 32, 32),
+                                               ("BagMarks", 64, 64), ("Toggle", 64, 32)]:
     data = (root / "Media" / f"{name}.tga").read_bytes()
     width, height, depth = struct.unpack_from("<HHB", data, 12)
-    assert (width, height, depth) == (size, size, 32)
+    assert (width, height, depth) == (expected_width, expected_height, 32)
     assert data[2] == 2, "Textures must be uncompressed true-color TGA"
     alpha = data[18 + 3:18 + width * height * 4:4]
     assert min(alpha) == 0 and max(alpha) == 255, "Texture needs transparent and opaque pixels"
+    if name == "Border":
+        assert alpha[16 * width + 16] == 0 and alpha[16 * width] == 255, "Border must frame a clear center"
+    if name == "Circles":
+        assert alpha[16 * width + 16] == 255 and alpha[0] == 0, "Circles must have a solid center and clear corners"
 icon_path = re.search(r"^## IconTexture: (.+)$", toc, re.MULTILINE)[1]
 assert icon_path.startswith("Interface\\AddOns\\BagMarks\\")
 assert (root / icon_path.removeprefix("Interface\\AddOns\\BagMarks\\").replace("\\", "/")).is_file()

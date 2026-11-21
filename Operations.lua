@@ -86,7 +86,28 @@ function Ops:PreviewJunk()
     end)
 end
 
+-- Pick the first deliverable stack in bag order when starting a fresh letter.
+-- All subsequent entries must resolve to that same character.
+function Ops:CollectMail(toField)
+    A.Store:RefreshInventory()
+    local entries, recipient = {}, nil
+    for _, item in ipairs(ordered(A.API:Scan(false))) do
+        if not (A.Mail.sentGUIDs and A.Mail.sentGUIDs[item.guid]) and self:Eligible(item, "mail") then
+            local to = A.MailRoutes:Resolve(item.itemID)
+            if to and (not toField or A.MailRoutes:MatchesToField(toField, to)) then
+                -- Pin the saved address for this batch even when To shows a bare name.
+                recipient = recipient or A.MailRoutes:Qualify(to)
+                if A.MailRoutes:SameRecipient(to, recipient) then
+                    entries[#entries + 1] = { guid = item.guid, count = item.count, itemID = item.itemID }
+                end
+            end
+        end
+    end
+    return entries, recipient
+end
+
 function Ops:AttachMail(automatic)
+    if A.Mail:SendPending() then return end
     A.Mail.attachAttempted = true
     if not A.API:MailReady() then
         if not automatic then A.Print("Open Send Mail with an empty cursor, outside combat.") end
@@ -98,19 +119,13 @@ function Ops:AttachMail(automatic)
         if not automatic then A.Print("All mail attachment slots are occupied.") end
         return
     end
-    A.Store:RefreshInventory()
-    local items = A.API:Scan(false)
-    local entries = {}
-    for _, item in ipairs(ordered(items)) do
-        if self:Eligible(item, "mail") then
-            entries[#entries + 1] = { guid = item.guid, count = item.count, itemID = item.itemID }
-        end
-    end
-    if #entries == 0 then
-        if not automatic then A.Print("No eligible Mail items. Bound, quest, refundable, busy and changed stacks are skipped.") end
+    local entries, recipient = A.Mail:PlanDraft()
+    if not entries or #entries == 0 then
+        if not automatic then A.Print("No eligible Mail stacks for this draft. Check the To field and your recipients in the Mail tab.") end
         return
     end
-    self.job = { kind = "mail", automatic = automatic, entries = entries, index = 1, completed = 0 }
+    A.Mail.batchRecipient, A.Mail.batchComplete = recipient, false
+    self.job = { kind = "mail", automatic = automatic, entries = entries, index = 1, completed = 0, recipient = recipient }
     self:Step()
 end
 
@@ -133,7 +148,8 @@ function Ops:Finish()
     self.job = nil
     self:RefreshButtons()
     if job and job.kind == "mail" then
-        A.Print(job.completed .. " stack(s) attached. Review the recipient and attachments, then use Blizzard's Send button.")
+        A.Mail.batchComplete = true
+        A.Print(job.completed .. " stack(s) attached for " .. A.MailRoutes:DisplayName(job.recipient) .. ". Review the draft, then click Send.")
     elseif job then
         local skipped = job.skipped and (" Skipped " .. job.skipped .. " moved or busy stack(s).") or ""
         A.Print(job.completed .. " marked stack(s) sold." .. skipped)
@@ -142,7 +158,8 @@ end
 
 local function jobReady(job)
     if job.kind == "mail" then
-        return A.API:MailReady() and (not job.automatic or (A.db.autoAttachMail and SendMailFrame.sendMode ~= "reply"))
+        return A.API:MailReady() and A.Mail:AddressMatches(job.recipient)
+            and (not job.automatic or (A.db.autoAttachMail and SendMailFrame.sendMode ~= "reply"))
     end
     return A.API:MerchantReady() and (not job.automatic or A.db.autoSellJunk)
 end
@@ -170,6 +187,7 @@ function Ops:Step()
     end
     -- Revalidate identity, mark, size and eligibility immediately before every action.
     if not item or item.itemID ~= entry.itemID or item.count ~= entry.count or not self:Eligible(item, job.kind)
+        or (job.kind == "mail" and not A.MailRoutes:SameRecipient(A.MailRoutes:Resolve(item.itemID), job.recipient))
         or (job.kind == "junk" and A.API:SellPrice(item) ~= entry.price) then
         self:Cancel("An item changed or is unavailable. Review the remaining marked items and try again.")
         return
@@ -223,7 +241,11 @@ function Ops:Poll()
             if guid then complete = guid == job.pending.guid
             else complete = not A.API:Find(job.pending.guid, false) end
         end
-        if complete then A.Mail:QueueDraftUpdate() end
+        if complete then
+            A.Mail.attached = A.Mail.attached or {}
+            A.Mail.attached[job.attachment] = job.pending
+            A.Mail:QueueDraftUpdate()
+        end
     else
         complete = not A.API:Find(job.pending.guid, false)
     end
@@ -248,7 +270,7 @@ function Ops:RefreshButtons()
     end
     if self.mailButton then
         self.mailButton:SetShown(A.IsEnabled() and A.mailOpen == true)
-        self.mailButton:SetEnabled(not self.job and A.API:MailReady() and true or false)
+        self.mailButton:SetEnabled(not self.job and not A.Mail:SendPending() and A.API:MailReady() and true or false)
     end
     if self.nativeJunkGuard then
         local block = false
@@ -283,7 +305,7 @@ function Ops:CreateButtons()
         self.mailButton = A.UI.Button(SendMailFrame, "Attach Marked Items", 160, 0, 0, function() self:AttachMail() end)
         self.mailButton:ClearAllPoints()
         self.mailButton:SetPoint("TOPLEFT", SendMailFrame, "BOTTOMLEFT", 14, -3)
-        A.UI.Tip(self.mailButton, "Attach Marked Items", "Attach eligible Mail stacks to free slots. Review them and click Send yourself. Unsent marks are retained.")
+        A.UI.Tip(self.mailButton, "Attach Marked Items", "Prepare one recipient's marked stacks. If you enter a To name, only stacks assigned to that character are attached.")
     end
     if MerchantSellAllJunkButton and not self.nativeJunkGuard then
         -- This separate button intercepts clicks only while our guard is shown.

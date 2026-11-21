@@ -5,10 +5,11 @@ Frame.__index = Frame
 
 local function newFrame(kind, name, parent, template)
     local f = setmetatable({ kind = kind, name = name, parent = parent, template = template, shown = true,
-        scripts = {}, hooks = {}, width = 36, height = 36, level = 1, strata = "MEDIUM", enabled = true }, Frame)
+        scripts = {}, hooks = {}, width = 36, height = 36, enabled = true }, Frame)
     M.frames[#M.frames + 1] = f
     if name then _G[name] = f end
     if template == "BasicFrameTemplateWithInset" then f.TitleText = newFrame("FontString", nil, f) end
+    if template == "InputBoxInstructionsTemplate" then f.Instructions = newFrame("FontString", nil, f) end
     if template == "PanelTopTabButtonTemplate" then
         f.Text = newFrame("FontString", nil, f)
         for _, part in ipairs({ "Left", "Middle", "Right", "LeftActive", "MiddleActive", "RightActive" }) do
@@ -45,11 +46,12 @@ function Frame:GetCenter() return 100, 100 end
 function Frame:GetEffectiveScale() return (self.scale or 1) * (self.parent and self.parent:GetEffectiveScale() or 1) end
 function Frame:SetScale(scale) self.scale = scale end
 function Frame:SetFrameStrata(s) self.strata = s end
-function Frame:GetFrameStrata() return self.strata end
+function Frame:GetFrameStrata() return self.strata or (self.parent and self.parent:GetFrameStrata()) or "MEDIUM" end
 function Frame:SetFrameLevel(l) self.level = l end
 function Frame:SetAlpha(alpha) self.alpha = alpha end
 function Frame:GetAlpha() return self.alpha or 1 end
-function Frame:GetFrameLevel() return self.level end
+function Frame:GetFrameLevel() return self.level or (self.parent and self.parent:GetFrameLevel() + 1) or 1 end
+function Frame:SetToplevel(value) self.toplevel = value end
 function Frame:SetClampedToScreen(value) self.clamped = value end
 function Frame:SetMovable(value) self.movable = value end
 function Frame:EnableMouse(value) self.mouse = value end
@@ -82,11 +84,26 @@ function Frame:IsVisible() return self.shown and (not self.parent or self.parent
 function Frame:GetParent() return self.parent end
 function Frame:SetParent(parent) self.parent = parent end
 function Frame:IsForbidden() return false end
-function Frame:SetEnabled(value) self.enabled = value end
+function Frame:SetEnabled(value)
+    if self.enabled ~= value then self.enabled = value; self:Fire(value and "OnEnable" or "OnDisable") end
+end
+function Frame:IsEnabled() return self.enabled end
+function Frame:Raise() self.raised = true end
+function Frame:SetBackdrop(value) self.backdrop = value end
+function Frame:SetBackdropColor(...) self.background = { ... } end
+function Frame:SetBackdropBorderColor(...) self.borderColor = { ... } end
+function Frame:SetTextColor(...) self.textColor = { ... } end
+function Frame:SetTextInsets(...) self.insets = { ... } end
+function Frame:SetFontObject(value) self.font = value end
+function Frame:SetFontString(value) self.caption = value end
+function Frame:GetFontString() return self.caption end
+function Frame:SetWordWrap(value) self.wordWrap = value end
+function Frame:SetTexCoord(...) self.uv = { ... } end
 function Frame:SetChecked(value) self.checked = value end
 function Frame:GetChecked() return self.checked end
 function Frame:SetText(value)
     self.text = value
+    if self.caption then self.caption:SetText(value) end
     if self.kind == "EditBox" then self:Fire("OnTextChanged", false) end
 end
 function Frame:GetText() return self.text or "" end
@@ -112,6 +129,7 @@ end
 function Frame:SetFocus()
     if M.keyboardFocus and M.keyboardFocus ~= self then M.keyboardFocus:ClearFocus() end
     self.focus, M.keyboardFocus = true, self
+    self:Fire("OnEditFocusGained")
 end
 function Frame:HighlightText() self.highlighted = true end
 function Frame:StartMoving() self.moving = true end
@@ -151,6 +169,7 @@ function PanelTemplates_SetTab(frame, id)
     end
 end
 UIParent = newFrame("Frame", "UIParent")
+UIParent:SetSize(1280, 720)
 Minimap = newFrame("Frame", "Minimap", UIParent)
 Minimap:SetSize(140, 140)
 GameTooltip = newFrame("GameTooltip", "GameTooltip", UIParent)
@@ -160,15 +179,19 @@ MerchantFrame.selectedTab = 1
 MerchantFrame:Hide()
 MerchantSellAllJunkButton = newFrame("Button", "MerchantSellAllJunkButton", MerchantFrame)
 SendMailFrame = newFrame("Frame", "SendMailFrame", UIParent)
+function SendMailFrame:FocusGamepad() end
 SendMailFrame:Hide()
 SendMailNameEditBox = newFrame("EditBox", "SendMailNameEditBox", SendMailFrame)
 SendMailSubjectEditBox = newFrame("EditBox", "SendMailSubjectEditBox", SendMailFrame)
+SendMailBodyEditBox = newFrame("EditBox", "SendMailBodyEditBox", SendMailFrame)
+SendMailMailButton = newFrame("Button", "SendMailMailButton", SendMailFrame)
 BankFrame = newFrame("Frame", "BankFrame", UIParent)
 BankFrame.BankPanel = newFrame("Frame", nil, BankFrame)
 BankFrame:Hide()
 UISpecialFrames, SlashCmdList = {}, {}
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, message) M.messages[#M.messages + 1] = message end }
 Enum = { BagIndex = { Backpack = 0, Bag_1 = 1, Bag_2 = 2, Bag_3 = 3, Bag_4 = 4, ReagentBag = 5 },
+    ItemClass = { Tradegoods = 7, Recipe = 9 },
     BagSlotFlags = { ExcludeJunkSell = 64 },
     BankType = { Character = 0, Account = 2 }, TooltipDataType = { Item = 0 },
     PlayerInteractionType = { MailInfo = 17 } }
@@ -245,6 +268,18 @@ C_Cursor = { GetCursorItem = function()
 end }
 InputUtil = { IsGamepadUIEnabled = function() return M.gamepad or false end }
 C_Item = {
+    GetItemNameByID = function(id)
+        local item = M.info and M.info[id]
+        return item and not item.uncached and (item.secretName or item.name) or nil
+    end,
+    GetItemIconByID = function(id) return M.info[id] and M.info[id].texture end,
+    RequestLoadItemDataByID = function(id) M.requestedItems[id] = (M.requestedItems[id] or 0) + 1 end,
+    GetItemInfoInstant = function(id)
+        local item = M.info[id]
+        if item and not item.missingClass then
+            return id, "Type", "Subtype", "", 1, item.class or 15, item.subclass or 0
+        end
+    end,
     GetItemGUID = function(location)
         local item = locatedItem(location)
         return item and item.guid
@@ -316,6 +351,19 @@ C_Item = {
 }
 M.secret = {}
 function issecretvalue(value) return value == M.secret end
+function UnitFullName(unit)
+    assert(unit == "player")
+    local name = M.playerName or "Sender"
+    local first, surname = name:match("^(%S+) (.+)$")
+    return first or name, M.playerSurname or surname
+end
+UnitNameUnmodified = UnitFullName
+function RegionalUniqueNamesEnabled() return M.regionalNames == true end
+NameUtil = { GetUnmodifiedUnitFullName = function(unit)
+    local first, surname = UnitNameUnmodified(unit)
+    return surname and (first .. " " .. surname) or first
+end }
+function GetNormalizedRealmName() return M.realm or "Realm" end
 function InCombatLockdown() return M.combat or false end
 function IsAltKeyDown() return M.alt or false end
 function IsControlKeyDown() return M.ctrl or false end
@@ -352,11 +400,41 @@ ATTACHMENTS_MAX_SEND = 12
 function HasSendMailItem(index) return M.attachments[index] ~= nil end
 function GetSendMailItem(index)
     local i = M.attachments[index]
-    if i then
+    if i and not i.missingMailDetails then
         local name = i.name or "Test item"
         if i.uncached then name = nil end
         return name, i.itemID, 1, i.count, 1
     end
+end
+function SendMailFrame_CanSend()
+    SendMailMailButton:SetEnabled(SendMailNameEditBox:GetText() ~= "" and SendMailSubjectEditBox:GetText() ~= "")
+end
+function SendMailFrame_Update()
+    -- The buttons retain their last paint even when the server-side slots clear.
+    M.mailIcons = {}
+    local title
+    for slot = 1, ATTACHMENTS_MAX_SEND do
+        local name, id, _, count = GetSendMailItem(slot)
+        M.mailIcons[slot] = id
+        if name and not title then title = count > 1 and (name .. " (" .. count .. ")") or name end
+    end
+    local subject = SendMailSubjectEditBox:GetText()
+    if subject == SendMailFrame.previousItem or (title and subject == "") then
+        SendMailSubjectEditBox:SetText(title or "")
+        SendMailFrame.previousItem = title or ""
+    end
+    if not next(M.mailIcons) then SendMailFrame.previousItem = "" end
+    SendMailFrame_CanSend()
+end
+function ClearSendMail()
+    M.clearDraftCalls = M.clearDraftCalls + 1
+    if M.rejectClearDraft then return end
+    for slot, item in pairs(M.attachments) do
+        if not (item.guid and M.delivered[item.guid]) then M.returnToBags(item) end
+        M.attachments[slot] = nil
+    end
+    SendMailNameEditBox:SetText(""); SendMailSubjectEditBox:SetText(""); SendMailBodyEditBox:SetText("")
+    M.A.eventFrame:Fire("OnEvent", "MAIL_SEND_INFO_UPDATE")
 end
 function ClickSendMailItemButton(index, clear)
     if clear then
@@ -364,7 +442,7 @@ function ClickSendMailItemButton(index, clear)
         if M.failRemoval then error("removal refused") end
         if M.rejectRemoval then return end
         local item = M.attachments[index]
-        if item and M.returnToBags(item) then M.attachments[index] = nil end
+        if item and (M.delivered[item.guid] or M.returnToBags(item)) then M.attachments[index] = nil end
         if M.reentrantMail then M.A.eventFrame:Fire("OnEvent", "MAIL_SEND_INFO_UPDATE") end
         return
     end
@@ -453,11 +531,14 @@ local function menuDescription(owner)
     function root:CreateTitle(text) self.title = text end
     function root:SetScrollMode(height) self.scrollHeight = height end
     function root:CreateRadio(text, selected, callback)
-        self.choices[#self.choices + 1] = { text = text, selected = selected, callback = callback }
+        local option = { text = text, selected = selected, callback = callback }
+        function option:AddInitializer(fn) self.initializer = fn end
+        self.choices[#self.choices + 1] = option
+        return option
     end
-    function root:CreateButton(text)
+    function root:CreateButton(text, callback)
         local child = menuDescription(self.owner)
-        child.text = text
+        child.text, child.callback = text, callback
         self.children[#self.children + 1] = child
         return child
     end
@@ -506,6 +587,7 @@ function M.item(guid, bag, slot, options)
     M.bags[bag] = M.bags[bag] or {}
     M.bags[bag][slot] = i
     M.info[i.link] = i
+    M.info[i.itemID] = i
     return i
 end
 
@@ -555,6 +637,8 @@ function M.ellesmereButton(bag, slot, list)
 end
 
 function M.reset(A)
+    M.playerName, M.playerSurname, M.regionalNames, M.realm = nil, nil, nil, nil
+    M.requestedItems = {}
     M.A, M.bags, M.info, M.attachments, M.messages, M.sold, M.timers = A, {}, {}, {}, {}, {}, {}
     M.equipped, M.excludedBags = {}, {}
     M.time, M.bindings, M.overrides, M.bindingSet, M.savedBindingSet = 0, {}, nil, 1, nil
@@ -564,6 +648,8 @@ function M.reset(A)
     M.saleAttempts = 0
     M.used, M.groundTarget = {}, false
     M.mailActive, M.mailQueries = nil, 0
+    M.mailIcons = {}
+    M.clearDraftCalls, M.delivered, M.rejectClearDraft = 0, {}, false
     M.cursorLocationMissing, M.cursorKind, M.gamepad, M.failClear, M.keepCursor, M.clearCalls = nil, nil, false, false, false, 0
     M.lockCalls, M.unlockCalls, M.reentrantLocks, M.reentrantCursor = 0, {}, false, false
     M.locationFailure, M.secretLocation, M.secretLock, M.failLock, M.rejectLock, M.failUnlock = false, false, false, false, false, false
@@ -583,6 +669,7 @@ function M.reset(A)
     A.auctionOpen = false
     A.Mail:Close()
     A.Bags.overlays, A.Bags.inputOwners = {}, {}
+    A.Bags:RefreshCombatInput()
     A.Hover:Refresh()
     EUI_Bags = nil
     if A.Ellesmere then A.Ellesmere.slots, A.Ellesmere.registered = {}, nil end
@@ -593,11 +680,15 @@ function M.reset(A)
     A.Settings.bindingAction = A.Bindings.action
     A.Bindings:StopCapture()
     A.Settings.frame:Hide()
+    if A.Settings.ruleFrame then A.Settings.ruleFrame:Hide() end
+    A.Settings.rulesQueued, A.Settings.requestedRuleItems = nil, {}
+    A.Settings.clearRuleFilters:Fire("OnClick")
     A.Settings:SelectTab("General")
     if A.Diagnostics.frame then A.Diagnostics.frame:Hide() end
     MerchantFrame:Hide(); SendMailFrame:Hide(); BankFrame:Hide()
     SendMailNameEditBox:SetText("")
     SendMailSubjectEditBox:SetText("")
+    SendMailBodyEditBox:SetText(""); SendMailMailButton:SetEnabled(false)
     SendMailFrame.previousItem = nil
     SendMailFrame.sendMode, SendMailNameEditBox.focus, SendMailNameEditBox.highlighted = nil, false, false
     local mini = A.Minimap

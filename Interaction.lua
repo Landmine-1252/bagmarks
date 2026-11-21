@@ -20,34 +20,41 @@ for _, option in ipairs(Interaction.modifiers) do Interaction.modifierLabels[opt
 for _, option in ipairs(Interaction.buttons) do Interaction.buttonLabels[option[1]] = option[2] end
 for _, option in ipairs(Interaction.actions) do Interaction.actionLabels[option[1]] = option[2] end
 
+local chords = { [0] = "NONE", "ALT", "CTRL", "ALT-CTRL", "SHIFT", "ALT-SHIFT", "CTRL-SHIFT", "ALT-CTRL-SHIFT" }
+
+function Interaction:ChordActive()
+    local keys = (IsAltKeyDown() and 1 or 0) + (IsControlKeyDown() and 2 or 0) + (IsShiftKeyDown() and 4 or 0)
+    return (A.mode and keys == 0) or A.db.modifier == chords[keys]
+end
+
 function Interaction:Active()
     -- A carried item needs the normal drop click, even while marking mode is on.
-    if not A.CanAct() or GetCursorInfo() then return false end
-    local keys = {}
-    if IsAltKeyDown() then keys[#keys + 1] = "ALT" end
-    if IsControlKeyDown() then keys[#keys + 1] = "CTRL" end
-    if IsShiftKeyDown() then keys[#keys + 1] = "SHIFT" end
-    local held = #keys == 0 and "NONE" or table.concat(keys, "-")
+    if not A.IsEnabled() or GetCursorInfo() then return false end
+    if A.InCombat() and ((SpellIsTargeting and SpellIsTargeting())
+        or (GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus())) then return false end
     -- Require an exact chord so extra modifiers remain available to the game.
     -- Mode adds an unmodified click; it does not remove the configured shortcut.
-    return (A.mode and held == "NONE") or A.db.modifier == held
+    return self:ChordActive()
 end
 
 function Interaction:Matches(button)
     return button == A.db.mouseButton and self:Active()
 end
 
-function Interaction:Hint()
+function Interaction:Shortcut()
     local mouse = self.buttonLabels[A.db.mouseButton]
-    local action = self.actionLabels[A.db.markingAction]
-    if A.mode then return mouse .. ": " .. action .. " (marking mode)" end
-    if A.db.modifier == "MODE" then return "Enable Item Marking Mode, then " .. mouse end
-    local modifier = A.db.modifier ~= "NONE" and (self.modifierLabels[A.db.modifier] .. " + ") or ""
-    return modifier .. mouse .. ": " .. action
+    if A.mode or A.db.modifier == "MODE" or A.db.modifier == "NONE" then return mouse end
+    return self.modifierLabels[A.db.modifier] .. " + " .. mouse
+end
+
+function Interaction:Hint()
+    local shortcut = self:Shortcut()
+    if not A.mode and A.db.modifier == "MODE" then return "Enable Item Marking Mode, then " .. shortcut end
+    return shortcut .. ": " .. self.actionLabels[A.db.markingAction] .. (A.mode and " (marking mode)" or "")
 end
 
 function Interaction:Cycle(owner, item)
-    if not A.CanAct() or not item then return end
+    if not A.IsEnabled() or not item then return end
     -- A changed stack deserves an explicit choice even when cycling is enabled.
     if A.char.review[item.guid] then
         A.UI:ItemMenu(owner, item)
@@ -59,7 +66,7 @@ function Interaction:Cycle(owner, item)
 end
 
 function Interaction:Mark(owner, item)
-    if not A.CanAct() or not item then return end
+    if not A.IsEnabled() or not item then return end
     if A.db.markingAction == "menu" then A.UI:ItemMenu(owner, item)
     else self:Cycle(owner, item) end
 end

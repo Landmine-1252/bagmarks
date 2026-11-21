@@ -53,6 +53,29 @@ return function(M, A, test, eq, mark)
         assert(not report:find("slot=2; mark=Normal", 1, true))
     end)
 
+    test("opening diagnostics raises the entire window above settings and its editor", function()
+        local s, d = A.Settings, A.Diagnostics
+        s:OpenItemRoutes(211527)
+        A.UI:Confirm("Pending confirmation", "Keep this open", "Accept", function() error("unexpected acceptance") end)
+        eq(A.UI.confirm:GetFrameStrata(), "FULLSCREEN_DIALOG"); eq(A.UI.confirm.raised, true)
+        A.Slash("debug")
+        eq(s.ruleFrame:IsVisible(), true); eq(s.ruleFrame:GetFrameStrata(), "DIALOG")
+        eq(d.frame:GetFrameStrata(), "TOOLTIP"); eq(d.frame.toplevel, true); eq(d.frame.raised, true)
+        assert(d.frame.backdrop.bgFile and d.frame.mouse)
+        for _, child in ipairs({ d.scroll, d.edit, d.selectAll, d.refresh }) do
+            eq(child:GetFrameStrata(), d.frame:GetFrameStrata())
+            assert(child:GetFrameLevel() > d.frame:GetFrameLevel())
+        end
+        d.frame.raised = false
+        SlashCmdList.BAGMARKSCHECK("")
+        eq(d.frame.raised, true)
+        d.selectAll:Fire("OnClick"); d.edit:Fire("OnEscapePressed")
+        eq(d.frame:IsShown(), false); eq(s.ruleFrame:IsVisible(), true)
+        eq(A.UI.confirm:IsVisible(), true); A.UI:CloseConfirmation()
+        s:SelectTab("Marking"); s.bindButton:Fire("OnClick")
+        d:Open(); eq(A.Bindings.capture:IsShown(), false)
+    end)
+
     test("diagnostics remain available in combat without scanning or changing holds", function()
         local item = sleeping({ held = true })
         M.combat = true

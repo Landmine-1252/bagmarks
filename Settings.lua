@@ -1,114 +1,100 @@
--- Reusable settings window built from unprotected native widgets. Most options
--- refresh through A.SetOption; mail edits and key capture have separate lifecycles.
+-- Settings, bag menus and the Blizzard launcher all open this same window.
 local _, A = ...
-local SettingsUI = {}
-A.Settings = SettingsUI
+local UI = A.UI
+local S = { width = 566, tabs = {}, panels = {}, checks = {} }
+A.Settings = S
+local windowWidth, windowHeight = 772, 592
 
-function SettingsUI:Create()
-    if self.frame then return end
-    local UI = A.UI
-    local f = UI.Window("BagMarksSettings", "BagMarks " .. A.version, 420, 530)
-    self.frame, self.checks, self.tabs, self.panels = f, {}, {}, {}
-    self.bindingAction = A.Bindings.action
-    -- Blizzard's tab helpers use this ordered array plus selectedTab to choose
-    -- active artwork. Our named panels hold each page's controls separately.
-    f.Tabs, f.numTabs, f.minTabWidth, f.maxTabWidth = {}, 3, 112, 112
-    for i, name in ipairs({ "General", "Marking", "Appearance" }) do
-        local page = name
-        local tab = CreateFrame("Button", nil, f, "PanelTopTabButtonTemplate")
-        tab:SetPoint("TOPLEFT", 24 + (i - 1) * 130, -35)
-        tab:SetText(name)
-        tab:SetID(i)
-        PanelTemplates_TabResize(tab, 0, 112)
-        tab:SetScript("OnClick", function() self:SelectTab(page) end)
-        self.tabs[name], f.Tabs[i] = tab, tab
-        local panel = CreateFrame("Frame", nil, f)
-        panel:SetPoint("TOPLEFT", 24, -84)
-        panel:SetSize(372, 332)
-        self.panels[name] = panel
+local function generalDetail()
+    if not A.db.enabled then return "Enable BagMarks below to start marking items." end
+    if not A.IsEnabled() then return "Item marking is currently unavailable." end
+    local shortcut = A.Interaction:Shortcut()
+    if A.db.modifier == "MODE" and not A.mode then
+        if A.InCombat() then return "You can turn on marking mode after combat." end
+        shortcut = "Turn on marking mode, then use " .. shortcut
     end
-    local general, marking, appearance = self.panels.General, self.panels.Marking, self.panels.Appearance
-    local function check(parent, key, text, y)
-        local widget = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-        widget:SetSize(24, 24)
-        widget:SetPoint("TOPLEFT", -4, y)
-        widget.label = UI.Label(widget, text, 28, -5)
-        widget:SetScript("OnClick", function(button) A.SetOption(key, button:GetChecked() == true) end)
-        self.checks[key] = widget
-        return widget
+    local action = A.db.markingAction == "menu" and "open its mark menu." or "cycle its mark."
+    return shortcut .. " on a bag item to " .. action
+end
+
+local function rulesDetail()
+    if not A.db.rememberItemTypes then
+        return "Automatic marks are paused. Turn them on in General.\nMail recipients still apply to items you mark for mail."
     end
+    return "Manage future marks for this character and mail recipients for your account."
+end
+
+local pages = {
+    { "General", generalDetail },
+    { "Marking", "Choose how to mark an item with your mouse or keyboard." },
+    { "Mail", "Choose a destination for the stacks you mark for mail." },
+    { "Item rules", rulesDetail },
+    { "Appearance", "Choose how Locked, Junk and Mail appear on your items." },
+}
+
+function S:Check(parent, key, label, x, y, width)
+    local button = CreateFrame("CheckButton", nil, parent)
+    button:SetSize(width, 28)
+    button:SetPoint("TOPLEFT", x, y)
+    button.label = UI.Label(button, label, 4, -7)
+    local path = "Interface\\AddOns\\" .. A.name .. "\\Media\\Toggle.tga"
+    button.track = button:CreateTexture(nil, "ARTWORK")
+    button.track:SetTexture(path)
+    button.track:SetTexCoord(0, .5, 0, .5)
+    button.track:SetSize(30, 15)
+    button.track:SetPoint("RIGHT", -4, 0)
+    button.thumb = button:CreateTexture(nil, "OVERLAY")
+    button.thumb:SetTexture(path)
+    button.thumb:SetTexCoord(.5, .75, 0, .5)
+    button.thumb:SetSize(11, 11)
+    button:SetScript("OnClick", function() A.SetOption(key, button:GetChecked() == true) end)
+    self.checks[key] = button
+    return button
+end
+
+function S:CreateGeneral(panel)
+    local w = self.width
+    local account = UI.Panel(panel, 0, 0, w, 102)
+    UI.Label(account, "Addon controls", 14, -11, "GameFontNormal")
+    self:Check(account, "enabled", "Enable BagMarks", 10, -33, w - 20)
+    UI.Line(account, 14, -64, w - 28)
+    self:Check(account, "minimap", "Show minimap button", 10, -69, w - 20)
+    local items = UI.Panel(panel, 0, -118, w, 146)
+    UI.Label(items, "Item handling", 14, -11, "GameFontNormal")
+    local sell = self:Check(items, "autoSellJunk", "Automatically sell marked junk", 10, -33, w - 20)
+    UI.Tip(sell, "Automatic junk selling", "At your next merchant visit, sell eligible stacks marked Junk. You can stop a sale in progress.")
+    UI.Line(items, 14, -65, w - 28)
+    local remember = self:Check(items, "rememberItemTypes", "Remember Mail and Junk by item type", 10, -70, w - 20)
+    UI.Tip(remember, "Future copies", "Remember the marks you choose on this character. Clear Mark forgets an item type.")
+    UI.Label(items, "Manage which items receive these marks.", 14, -114, "GameFontHighlightSmall")
+    UI.Button(items, "View item rules", 116, w - 130, -107, function() self:OpenItemRoutes() end)
+end
+
+function S:CreateMarking(panel)
+    local w = self.width
+    local mouse = UI.Panel(panel, 0, 0, w, 158)
+    UI.Label(mouse, "Mouse shortcut", 14, -11, "GameFontNormal")
     local function choice(key, label, y, options)
-        UI.Label(marking, label, 0, y - 6)
-        local button = UI.Button(marking, "", 200, 172, y, function(owner)
+        UI.Label(mouse, label, 14, y - 5)
+        local button = UI.MenuButton(mouse, "", w - 218, 204, y, function(owner)
             MenuUtil.CreateContextMenu(owner, function(_, root)
                 for _, option in ipairs(options) do
                     local value = option[1]
-                    root:CreateRadio(option[2], function() return A.db[key] == value end,
-                        function() A.SetOption(key, value) end)
+                    root:CreateRadio(option[2], function() return A.db[key] == value end, function() A.SetOption(key, value) end)
                 end
             end)
         end)
         return button
     end
-
-    check(general, "enabled", "Enable BagMarks", 0)
-    check(general, "minimap", "Show minimap button", -30)
-    local autoSell = check(general, "autoSellJunk", "Automatically sell marked junk", -60)
-    UI.Tip(autoSell, "Automatic junk selling", "Starting with your next merchant visit, sell eligible items you marked as Junk without a confirmation. Locked, Mail, and unmarked items are excluded. Turn this off to stop remaining automatic sales.")
-    local remember = check(general, "rememberItemTypes", "Remember Mail and Junk by item type", -90)
-    UI.Tip(remember, "Remember item types", "Each character remembers its own Mail and Junk choices. An item you mail to an alt follows that alt's rules when collected. Clear Mark forgets that item type for this character.")
-    UI.Label(general, "Mail", 0, -121, "GameFontNormal")
-    UI.Label(general, "This character's recipient", 0, -159)
-    local recipient = CreateFrame("EditBox", nil, general, "InputBoxTemplate")
-    recipient:SetSize(192, 24)
-    recipient:SetPoint("TOPLEFT", 178, -152)
-    recipient:SetAutoFocus(false)
-    recipient:SetMaxLetters(100)
-    recipient:SetScript("OnEnterPressed", function(widget) widget:ClearFocus() end)
-    recipient:SetScript("OnEscapePressed", function(widget) widget:ClearFocus() end)
-    recipient:SetScript("OnTextChanged", function(widget, userInput)
-        if userInput then
-            A.Store:SetRecipient(widget:GetText())
-            self:RefreshRecipient()
-        end
-    end)
-    -- Defer compose autofill until editing finishes, so a partly typed saved
-    -- recipient cannot be copied into an already open mail draft.
-    recipient:SetScript("OnEditFocusLost", function()
-        self:RefreshRecipient()
-        A.Mail:QueueDraftUpdate()
-    end)
-    UI.Tip(recipient, "Default mail recipient", "Enter Character or Character-Realm for this sender. BagMarks fills an empty To field once per fresh draft. You can type over the selected name.")
-    self.recipient = recipient
-    self.usePreviousRecipient = UI.Button(general, "Use previous recipient", 168, 202, -118, function()
-        if A.readOnly or A.char.recipient ~= "" or not A.db.previousRecipient then return end
-        recipient:ClearFocus()
-        A.SetOption("recipient", A.db.previousRecipient)
-        A.db.previousRecipient = nil
-    end)
-    UI.Tip(self.usePreviousRecipient, "Previous account recipient", function()
-        return "Use " .. (A.db.previousRecipient or "") .. " as this character's default To name."
-    end)
-    check(general, "autoFillRecipient", "Automatically fill mail recipient", -194)
-    check(general, "autoAttachMail", "Automatically attach marked items", -224)
-    local mailNote = UI.Label(general, "Open Send Mail to attach eligible Mail stacks.\nThe first attachment supplies an empty subject.\nReview the recipient and items, then click Send.", 0, -262, "GameFontHighlightSmall")
-    mailNote:SetWidth(370)
-    mailNote:SetJustifyH("LEFT")
-
-    self.modifier = choice("modifier", "Modifier keys", 0, A.Interaction.modifiers)
-    self.mouseButton = choice("mouseButton", "Mouse button", -32, A.Interaction.buttons)
-    self.markingAction = choice("markingAction", "Click action", -64, A.Interaction.actions)
-    UI.Tip(self.modifier, "Marking shortcut", "Choose an exact modifier combination to avoid other addons' shortcuts. None captures the selected mouse button without modifiers; Marking Mode only leaves it native until you enable the mode.")
-    UI.Tip(self.mouseButton, "Mouse button", "Choose Left, Right, Middle, Mouse Button 4 or 5. Other mouse buttons keep their normal behavior outside Locked-item guards.")
-    UI.Tip(self.markingAction, "Click action", "Open the mark menu, or cycle Normal > Locked > Junk > Mail > Normal with each marking click. Changed stacks open the menu for review.")
-    self.interactionHint = UI.Label(marking, "", 0, -100, "GameFontHighlightSmall")
-    self.interactionHint:SetWidth(370)
-    self.interactionHint:SetJustifyH("LEFT")
-
-    UI.Label(marking, "Keyboard shortcut", 0, -150, "GameFontNormal")
-    -- This selector chooses which binding to edit; both actions remain usable.
-    -- Cancel capture before changing it so a key cannot land on the wrong action.
-    self.bindingChoice = UI.Button(marking, "", 200, 172, -144, function(owner)
+    self.modifier = choice("modifier", "Modifier keys", -31, A.Interaction.modifiers)
+    self.mouseButton = choice("mouseButton", "Mouse button", -60, A.Interaction.buttons)
+    self.markingAction = choice("markingAction", "Click action", -89, A.Interaction.actions)
+    UI.Tip(self.modifier, "Modifier keys", "Marking Mode only reserves the mouse button while the mode is on.")
+    UI.Tip(self.markingAction, "Click action", "Cycle through Normal, Locked, Junk and Mail, or open a menu with every mark.")
+    self.interactionHint = UI.Label(mouse, "", 14, -128, "GameFontHighlightSmall")
+    local keys = UI.Panel(panel, 0, -171, w, 175)
+    UI.Label(keys, "Keyboard shortcut", 14, -15, "GameFontNormal")
+    self.bindingChoice = UI.MenuButton(keys, "", w - 218, 204, -9, function(owner)
         A.Bindings:StopCapture()
         MenuUtil.CreateContextMenu(owner, function(_, root)
             for _, option in ipairs({ { A.Bindings.action, "Toggle marking mode" }, { A.Bindings.hoverAction, "Cycle hovered item" } }) do
@@ -118,115 +104,181 @@ function SettingsUI:Create()
             end
         end)
     end)
-    self.binding = UI.Label(marking, "", 0, -174)
-    self.bindButton = UI.Button(marking, "Set Key", 110, 0, -198, function() A.Bindings:StartCapture(self.bindingAction) end)
-    self.clearButton = UI.Button(marking, "Clear", 110, 126, -198, function()
+    self.binding = UI.Label(keys, "", 14, -48)
+    self.bindButton = UI.Button(keys, "Set Key", 114, 14, -73, function() A.Bindings:StartCapture(self.bindingAction) end)
+    self.clearButton = UI.Button(keys, "Clear", 86, 138, -73, function()
         A.Bindings:StopCapture()
         local ok, message = A.Bindings:Apply({}, false, self.bindingAction)
         if not ok then self:SetBindingMessage(message) end
     end)
-    self.restoreButton = UI.Button(marking, "Restore", 110, 252, -198, function()
+    self.restoreButton = UI.Button(keys, "Restore", 86, 234, -73, function()
         A.Bindings:StopCapture()
         local ok, message = A.Bindings:Restore(self.bindingAction)
         if not ok then self:SetBindingMessage(message) end
     end)
-    UI.Tip(self.restoreButton, "Restore shortcut", "Restore the shortcut from before your last change in this session. The default is unbound. Conflicting keys are never overwritten.")
-    self.bindingMessage = UI.Label(marking, "", 0, -230, "GameFontHighlightSmall")
-    self.bindingMessage:SetWidth(370)
-    self.bindingMessage:SetJustifyH("LEFT")
-    local modeNote = UI.Label(marking, "Cycle hovered item: point at an item and press your key.\nNormal > Locked > Junk > Mail > Normal.\nWorks with marking mode off; mouse controls stay available.", 0, -288, "GameFontHighlightSmall")
-    modeNote:SetWidth(370)
-    modeNote:SetJustifyH("LEFT")
+    UI.Tip(self.restoreButton, "Restore shortcut", "Restore the shortcut from before your last change in this session.")
+    self.bindingMessage = UI.Label(keys, "", 14, -113, "GameFontHighlightSmall")
+    self.bindingMessage:SetWidth(w - 28)
+end
 
-    check(appearance, "tooltips", "Show tooltip labels", 0)
-    check(appearance, "overlays", "Show item icons", -30)
-    UI.Label(appearance, "Mark size", 0, -70)
-    self.iconSize = UI.Button(appearance, "", 200, 172, -64, function(owner)
-        MenuUtil.CreateContextMenu(owner, function(_, root)
-            for _, option in ipairs(A.IconSizes) do
-                local value = option[1]
-                root:CreateRadio(option[2], function() return A.db.iconSize == value end,
-                    function() A.SetOption("iconSize", value) end)
-            end
-        end)
-    end)
-    UI.Tip(self.iconSize, "Mark size", "Small corner keeps the usual badge. Full item icon stretches a translucent mark across the item artwork, beneath counts and cooldowns. Changes during combat apply when combat ends.")
-    UI.Label(appearance, "Icon themes", 0, -112, "GameFontNormal")
+local previewItems = {
+    { "locked", "Locked", "INV_Sword_04" }, { "junk", "Junk", "INV_Misc_Bone_01" },
+    { "mail", "Mail", "INV_Fabric_Linen_01" },
+}
+
+function S:CreateAppearance(panel)
+    local w = self.width
+    local display = UI.Panel(panel, 0, 0, w, 75)
+    self:Check(display, "overlays", "Show item icons", 10, -6, w - 20)
+    UI.Line(display, 14, -37, w - 28)
+    self:Check(display, "tooltips", "Show tooltip labels", 10, -41, w - 20)
+    local preview = UI.Panel(panel, 0, -87, w, 87)
+    UI.Label(preview, "Mark size", 14, -12, "GameFontNormal")
+    self.sizeButtons, self.previewMarks = {}, {}
+    for i, option in ipairs(A.IconSizes) do
+        local size = option[1]
+        local button = UI.Button(preview, option[2], 98, 14 + (i - 1) * 100, -43, function() A.SetOption("iconSize", size) end)
+        self.sizeButtons[size] = button
+    end
+    for i, item in ipairs(previewItems) do
+        local frame = UI.Panel(preview, 351 + (i - 1) * 66, -10, 38, 38, "field")
+        local artwork = frame:CreateTexture(nil, "ARTWORK")
+        artwork:SetTexture("Interface\\Icons\\" .. item[3])
+        artwork:SetPoint("TOPLEFT", 1, -1)
+        artwork:SetSize(36, 36)
+        local mark = frame:CreateTexture(nil, "OVERLAY")
+        self.previewMarks[item[1]] = mark
+        local label = UI.Label(frame, item[2], -10, -48, "GameFontHighlightSmall")
+        label:SetWidth(58)
+        label:SetJustifyH("CENTER")
+    end
+    UI.Label(panel, "Icon theme", 0, -192, "GameFontNormal")
     self.themes = {}
-    for i, name in ipairs({ "Classic", "Minimal", "Colorful" }) do
+    for i, name in ipairs(A.themeOrder) do
         local theme = name
-        local button = UI.Button(appearance, name, 110, (i - 1) * 126, -136, function() A.SetOption("theme", theme) end)
+        local column, row = (i - 1) % 3, math.floor((i - 1) / 3)
+        local button = UI.Button(panel, "", 182, column * 192, -210 - row * 36, function() A.SetOption("theme", theme) end)
+        button:SetHeight(30)
+        button.label = UI.Label(button, name, 10, -9, "GameFontHighlightSmall")
         self.themes[name] = button
-        for j, state in ipairs({ "locked", "junk", "mail" }) do
+        for j, item in ipairs(previewItems) do
             local icon = button:CreateTexture(nil, "OVERLAY")
-            icon:SetSize(16, 16)
-            icon:SetPoint("TOPLEFT", 16 + (j - 1) * 30, -32)
-            A.PaintIcon(icon, state, theme)
+            icon:SetSize(19, 19)
+            icon:SetPoint("TOPLEFT", 103 + (j - 1) * 24, -5)
+            A.PaintIcon(icon, item[1], theme)
         end
     end
-    UI.Label(appearance, "Themes update your bag and bank icons immediately.", 0, -208, "GameFontHighlightSmall")
-    self.iconSizeNote = UI.Label(appearance, "", 0, -240, "GameFontHighlightSmall")
-    self.iconSizeNote:SetWidth(370)
-    self.iconSizeNote:SetJustifyH("LEFT")
-    local divider = f:CreateTexture(nil, "ARTWORK")
-    divider:SetColorTexture(.55, .45, .25, .5)
-    divider:SetPoint("TOPLEFT", 24, -424)
-    divider:SetSize(372, 1)
-    self.modeStatus = UI.Label(f, "", 24, -436, "GameFontNormal")
-    self.modeHint = UI.Label(f, "", 24, -456, "GameFontHighlightSmall")
-    self.modeHint:SetWidth(370)
-    self.modeHint:SetJustifyH("LEFT")
-    self.modeButton = UI.Button(f, "", 220, 24, -490, function() A.ToggleMode() end)
-    UI.Tip(self.modeButton, "Item Marking Mode", "When on, your selected mouse button marks items without holding a modifier. A Marking badge appears beside the pointer over bag items. Turn it off to return to your usual clicks. Combat turns the mode off.")
-    UI.Button(f, "Close", 110, 276, -490, function() f:Hide() end)
-    f:SetScript("OnShow", function() self:Refresh() end)
-    f:SetScript("OnHide", function() recipient:ClearFocus(); A.Bindings:StopCapture() end)
+    self.iconSizeNote = UI.Label(panel, "", 1, -357, "GameFontHighlightSmall")
+end
+
+function S:Create()
+    if self.frame then return end
+    local f = UI.Window("BagMarksSettings", "BagMarks " .. A.version, windowWidth, windowHeight)
+    self.frame, self.bindingAction = f, A.Bindings.action
+    local rail = UI.Panel(f, 0, -36, 158, windowHeight - 36, "rail")
+    for i, entry in ipairs(pages) do
+        local name = entry[1]
+        local tab = UI.Button(rail, name, 138, 10, -19 - (i - 1) * 38, function() self:SelectTab(name) end)
+        tab.surface = "rail"
+        tab:SetHeight(32)
+        local caption = tab:GetFontString()
+        caption:ClearAllPoints()
+        caption:SetPoint("LEFT", 13, 0)
+        tab.indicator = UI.Line(tab, 0, -7, 3, 18, "accent")
+        self.tabs[name] = tab
+        local panel = CreateFrame("Frame", nil, f)
+        panel.detail = entry[2]
+        panel:SetPoint("TOPLEFT", 182, -111)
+        panel:SetSize(self.width, 460)
+        self.panels[name] = panel
+    end
+    UI.Line(rail, 12, -501, 134)
+    UI.Button(rail, "Diagnostics", 134, 12, -516, function() A.Diagnostics:Open() end)
+    self.pageTitle = UI.Label(f, "", 182, -51, "GameFontNormalLarge")
+    self.pageDetail = UI.Label(f, "", 182, -78, "GameFontHighlightSmall")
+    self.pageDetail:SetWidth(self.width)
+    self:CreateGeneral(self.panels.General)
+    self:CreateMarking(self.panels.Marking)
+    self:CreateMailPanel()
+    self:CreateRuleList(self.panels["Item rules"])
+    self:CreateAppearance(self.panels.Appearance)
+    local footer = UI.Panel(f, 182, -491, self.width, 79)
+    self.modeFooter = footer
+    self.modeStatus = UI.Label(footer, "", 14, -12, "GameFontNormal")
+    self.modeHint = UI.Label(footer, "", 14, -38, "GameFontHighlightSmall")
+    self.modeHint:SetWidth(self.width - 180)
+    self.modeButton = UI.Button(footer, "", 154, self.width - 168, -26, function() A.ToggleMode() end)
+    f:HookScript("OnShow", function()
+        self:Refresh()
+        if self.selectedTab == "Item rules" then self:RefreshRules() end
+    end)
+    f:HookScript("OnHide", function()
+        local field = self:EditingRecipient()
+        if field then field:ClearFocus() end
+        self.ruleSearch:ClearFocus()
+        if self.ruleFrame then self.ruleFrame:Hide() end
+        A.Bindings:StopCapture()
+    end)
     self:SelectTab("General")
     self:Refresh()
 end
 
-function SettingsUI:SelectTab(name)
+function S:SelectTab(name)
     if not self.panels[name] then return end
-    self.selectedTab = name
-    for tab, panel in pairs(self.panels) do
-        panel:SetShown(tab == name)
+    local field = self:EditingRecipient()
+    if field and name ~= self.selectedTab then field:ClearFocus() end
+    if name ~= "Item rules" then
+        self.ruleSearch:ClearFocus()
+        if self.ruleFrame then self.ruleFrame:Hide() end
     end
-    PanelTemplates_SetTab(self.frame, self.tabs[name]:GetID())
-    -- A hidden edit/capture control must not keep consuming the player's input.
-    if name ~= "General" then self.recipient:ClearFocus() end
+    if name ~= "Mail" then self:ShowMailRecipes(false) end
     if name ~= "Marking" then A.Bindings:StopCapture() end
+    self.selectedTab = name
+    for _, page in ipairs(pages) do
+        local active = page[1] == name
+        self.panels[page[1]]:SetShown(active)
+        UI.Select(self.tabs[page[1]], active)
+    end
+    self.pageTitle:SetText(name)
+    self:RefreshPageDetail()
+    self.modeFooter:SetShown(name == "General" or name == "Marking" or name == "Appearance")
+    if name == "Item rules" then self:RefreshRules() end
 end
 
-function SettingsUI:SetBindingMessage(message)
+function S:RefreshPageDetail()
+    local panel = self.panels[self.selectedTab]
+    if panel then
+        self.pageDetail:SetText(type(panel.detail) == "function" and panel.detail() or panel.detail)
+    end
+end
+
+function S:SetBindingMessage(message)
     if self.bindingMessage then self.bindingMessage:SetText(message) end
 end
 
-function SettingsUI:RefreshRecipient()
-    -- Preserve the caret and any partially typed name during bag and UI refreshes.
-    if not self.recipient:HasFocus() then self.recipient:SetText(A.char.recipient) end
-    self.usePreviousRecipient:SetShown(not A.readOnly and A.char.recipient == "" and A.db.previousRecipient ~= nil)
-end
-
-function SettingsUI:Refresh()
+function S:Refresh()
     if not self.frame then return end
-    for key, check in pairs(self.checks) do check:SetChecked(A.db[key]); check:SetEnabled(not A.readOnly) end
+    self:RefreshPageDetail()
+    for key, check in pairs(self.checks) do
+        local on = A.db[key]
+        check:SetChecked(on)
+        check:SetEnabled(not A.readOnly)
+        if check.painted ~= on then
+            check.track:SetVertexColor(unpack(on and UI.colors.accent or UI.colors.edge))
+            check.thumb:ClearAllPoints()
+            check.thumb:SetPoint(on and "RIGHT" or "LEFT", check.track, on and "RIGHT" or "LEFT", on and -2 or 2, 0)
+            check.painted = on
+        end
+    end
     self.modifier:SetText(A.Interaction.modifierLabels[A.db.modifier])
     self.mouseButton:SetText(A.Interaction.buttonLabels[A.db.mouseButton])
     self.markingAction:SetText(A.Interaction.actionLabels[A.db.markingAction])
     local menuEnabled = not A.readOnly and MenuUtil and MenuUtil.CreateContextMenu and true or false
-    self.modifier:SetEnabled(menuEnabled)
-    self.mouseButton:SetEnabled(menuEnabled)
-    self.markingAction:SetEnabled(menuEnabled)
-    self.iconSize:SetText(A.iconSizeLabels[A.db.iconSize])
-    self.iconSize:SetEnabled(menuEnabled)
-    self.iconSizeNote:SetText(A.InCombat() and "Size changes will apply when combat ends."
-        or "Full item icon uses a translucent mark so the item\nartwork stays visible. Small corner is the default.")
-    self.interactionHint:SetText(A.Interaction:Hint() .. (A.db.markingAction == "cycle"
-        and "\nNormal > Locked > Junk > Mail > Normal" or "\nChoose a mark from the compact item menu."))
+    for _, button in ipairs({ self.modifier, self.mouseButton, self.markingAction, self.bindingChoice }) do button:SetEnabled(menuEnabled) end
+    self.interactionHint:SetText(A.Interaction:Hint())
     self:RefreshRecipient()
     local hovering = self.bindingAction == A.Bindings.hoverAction
     self.bindingChoice:SetText(hovering and "Cycle hovered item" or "Toggle marking mode")
-    self.bindingChoice:SetEnabled(menuEnabled)
     self.binding:SetText("Assigned key: " .. A.Bindings:Text(self.bindingAction))
     local bindingAllowed = not A.InCombat()
     self.bindButton:SetEnabled(bindingAllowed)
@@ -234,43 +286,60 @@ function SettingsUI:Refresh()
     self.restoreButton:SetEnabled(bindingAllowed)
     if not A.Bindings.capture or not A.Bindings.capture:IsShown() then
         self:SetBindingMessage(bindingAllowed and (hovering
-            and "Starts unbound. Space is usually Jump; choose a free key.\nTo use Space, first change Jump in WoW's Key Bindings."
-            or "Starts unbound. Uses your active Blizzard binding set.\nExisting shortcuts are never replaced.")
-            or "Keybinding changes are unavailable during combat.")
+            and "Point at a stack and press the assigned key to cycle its mark.\nChoose a free key or move its existing binding in WoW settings."
+            or "Press the assigned key to turn marking mode on or off.")
+            or "Keybinding changes are available after combat.")
     end
-    for theme, button in pairs(self.themes) do
-        button:SetText((A.db.theme == theme and "|cffffd100" or "") .. theme .. (A.db.theme == theme and "|r" or ""))
+    local size, theme = A.MarkSize(), A.db.theme
+    local fullSize = A.Themes[theme].fullSize
+    for choice, button in pairs(self.sizeButtons) do
+        UI.Select(button, choice == size)
+        button:SetEnabled(not A.readOnly and not fullSize)
+    end
+    for name, button in pairs(self.themes) do
+        UI.Select(button, A.db.theme == name)
         button:SetEnabled(not A.readOnly)
     end
-    self.modeStatus:SetText("Item Marking Mode: " .. (A.mode and "|cff66ccffON|r" or "|cffbbbbbbOFF|r"))
+    if self.previewSize ~= size or self.previewTheme ~= theme then
+        local side = size == "full" and 36 or size == "medium" and A.MediumMarkSize(36) or 14
+        local inset = size == "corner" and 3 or 1
+        for state, mark in pairs(self.previewMarks) do
+            mark:SetPoint("TOPRIGHT", -inset, -inset)
+            mark:SetSize(side, side)
+            mark:SetAlpha(A.MarkAlpha(size, theme))
+            A.PaintIcon(mark, state)
+        end
+        self.previewSize, self.previewTheme = size, theme
+    end
+    local note = fullSize and "Border outlines the full item icon." or ""
+    if A.InCombat() then
+        note = (fullSize and note .. " " or "") .. "Bag and bank size changes apply when combat ends."
+    end
+    self.iconSizeNote:SetText(note)
+    self.modeStatus:SetText("Marking mode  " .. (A.mode and "ON" or "OFF"))
     local hint
     if not A.IsEnabled() then hint = "Enable BagMarks in General to start marking items."
-    elseif A.InCombat() then hint = "Marking is paused during combat. Turn the mode on afterward."
-    elseif A.mode then
-        hint = A.Interaction.buttonLabels[A.db.mouseButton] .. " marks items without modifiers.\nTurn the mode off to return to your usual clicks."
-    else hint = "Turn on to mark with " .. A.Interaction.buttonLabels[A.db.mouseButton] .. " alone.\nThe hover key works independently, if assigned." end
+    elseif A.InCombat() then hint = A.db.modifier == "MODE" and "Marking mode is available after combat." or "Use your marking shortcut during combat."
+    elseif A.mode then hint = A.Interaction.buttonLabels[A.db.mouseButton] .. " marks items without modifiers."
+    elseif A.db.modifier == "NONE" then hint = "Your mouse shortcut already works without modifiers."
+    else hint = "Turn on marking mode to use " .. A.Interaction.buttonLabels[A.db.mouseButton] .. " alone." end
     self.modeHint:SetText(hint)
     self.modeButton:SetText(A.mode and "Turn marking mode off" or "Turn marking mode on")
     self.modeButton:SetEnabled(A.CanAct() and true or false)
 end
 
-function SettingsUI:Toggle()
+function S:Toggle()
     self:Create()
     self.frame:SetShown(not self.frame:IsShown())
 end
 
-function SettingsUI:RegisterCategory()
-    -- Register a small launcher in Blizzard settings; reuse the same compact
-    -- window opened by slash commands and the minimap instead of a second UI.
+function S:RegisterCategory()
     if self.category or not Settings or not Settings.RegisterCanvasLayoutCategory or not Settings.RegisterAddOnCategory then return end
     local panel = CreateFrame("Frame", nil, UIParent)
     panel:Hide()
-    A.UI.Label(panel, "BagMarks " .. A.version, 20, -20, "GameFontNormalLarge")
-    A.UI.Label(panel, "Mark items to keep, sell, or mail. Use /bm to open settings.", 20, -55)
-    A.UI.Button(panel, "Open BagMarks Settings", 220, 20, -90, function()
-        self:Create()
-        self.frame:Show()
-    end)
+    UI.Label(panel, "BagMarks " .. A.version, 20, -20, "GameFontNormalLarge")
+    UI.Label(panel, "Mark items to keep, sell, or mail. Open settings with /bm.", 20, -55)
+    UI.Button(panel, "Open BagMarks Settings", 220, 20, -90, function() self:Create(); self.frame:Show() end)
     self.category = Settings.RegisterCanvasLayoutCategory(panel, "BagMarks")
     Settings.RegisterAddOnCategory(self.category)
 end

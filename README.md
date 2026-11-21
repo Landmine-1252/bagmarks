@@ -25,21 +25,25 @@ The menu checks your current mark. Repeat the shortcut to change or clear it. Id
 
 To mark future copies automatically, enable **General → Remember Mail and Junk by item type**. It starts off. Mark a **Light Feather** for Mail once and the next feathers you pick up on that character get the Mail mark, including feathers added to an existing stack. Junk works the same way. Each character has its own rules. If your blacksmith marks Linen Cloth for Mail, your tailor can collect that cloth and keep it for crafting.
 
-While remembering is on, choosing Mail or Junk changes the rule for future copies. **Clear Mark** forgets that item type. **Locked** protects just the selected stack. Turning remembering off pauses the rules and keeps your existing marks.
+While remembering is on, choosing Mail or Junk changes the rule for future copies. If the item has a remembered mark, **Clear mark and forget future mark** clears the selected stack and stops applying that mark to future copies on this character. **Locked** protects just the selected stack. Turning remembering off pauses the rules and keeps your existing marks.
 
 ## Configure BagMarks
 
 Type **`/bm`** or **`/bagmarks`**, or **Left Click** the minimap button, to open settings.
 
-| Tab | What you can change |
+| Sidebar page | What you can change |
 | --- | --- |
-| **General** | Enable BagMarks, show the minimap button, remember item types, and configure junk sales and mail drafts |
+| **General** | See your current marking shortcut, enable BagMarks, show the minimap button, remember item types, and configure junk sales |
 | **Marking** | Choose mouse controls, a key to cycle the hovered item, and a key to toggle Item Marking Mode |
-| **Appearance** | Choose small or full-size marks, toggle icons and tooltip labels, and preview three icon themes |
+| **Mail** | Choose recipients for materials and profession recipes, set a bank alt, and control draft preparation |
+| **Item rules** | Search by item name, ID, mark or recipient. Filter by future mark and mail destination while adding, editing or removing rules. |
+| **Appearance** | Preview eleven themes on inventory artwork, choose a mark size, and toggle bag icons and tooltip labels |
 
-The minimap button, icons, and tooltip labels start on, with **Colorful** selected. Theme and visibility changes apply immediately. **Left-drag** the minimap button to move it.
+The minimap button, icons, and tooltip labels start on, with **Colorful** selected. Visibility changes apply immediately. **Left-drag** the minimap button to move it.
 
-**Larger marks:** Choose **Appearance → Mark size → Full item icon** to fill each marked item's icon square with a translucent symbol. The item artwork remains visible underneath. **Small corner** is the default. Size changes made during combat apply when combat ends.
+In **Appearance → Mark size**, choose **Small corner** for the default badge, **Medium corner** for a larger solid mark in the top right, or **Full item icon** for a translucent mark over the artwork. Medium scales to the icon column in Ellesmere list view. The preview updates immediately. Size changes in your bags and bank take effect after combat.
+
+**Border** draws a colored outline around the full item icon and leaves the artwork visible in the center. Switching away restores your chosen mark size. **Circles** draws a plain dot at your chosen size. Both use gold for Locked, red for Junk and blue for Mail.
 
 **Marking controls:** The default is **Ctrl + Shift + Right Click**. Change the modifier combination and mouse button in **Marking** to suit your setup. **None** needs no modifier; **Marking Mode only** enables marking only while the mode is on.
 
@@ -67,19 +71,45 @@ You can leave automatic selling off and keep using your usual junk seller. BagMa
 
 ## Mail marked items
 
-1. Mark the stacks you want to mail, then open **Send Mail** at the mailbox. BagMarks attaches eligible stacks to free slots. The first attachment supplies a blank subject, including the quantity for a stack.
-2. Enter the recipient, or set **General → This character's recipient** using `Character` or `Character-Realm`. With **Automatically fill mail recipient** enabled, each fresh draft starts with this sender's saved name. Type over it to choose someone else.
-3. Review the recipient, subject and attachments, then click Blizzard's **Send**. Use **Attach Marked Items** for another batch.
+Open **`/bm` → Mail**. Choose an alt from the list or type the player's full character name, such as **Landmine Ill**. Settings, tooltips and the mailbox show that name on every character. Existing saved recipients work automatically.
 
-**Automatically attach marked items** starts on. Turn it off in **General** to use the button manually. BagMarks skips replies when attaching automatically, preserves custom subjects, and keeps the marks on unsent items.
+| Setting | What goes there |
+| --- | --- |
+| **Cloth** | Cloth materials such as Linen Cloth and bolts |
+| **Ore, bars and stone** | Mining materials such as Copper Ore, Copper Bars and Rough Stone |
+| **Herbs** | Herbalism materials such as Peacebloom |
+| **Leather and hides** | Leatherworking materials such as Light Leather and Light Hide |
+| **Cooking** | Meat, fish, eggs, spices and other meal or drink ingredients. Cooking recipes also go here by default. |
+| **Profession recipes** | Set a default recipient for recipe items or choose a different character for each profession. |
+| **Mage scrolls** | Untranslated scrolls a mage can decipher with Comprehension. Ordinary power-up scrolls follow your fallback. |
+| **Account default** | Set a recipient such as your bank alt once for all your characters. It receives Mail-marked items with no item or category recipient. |
+| **Character override** | Set a different default recipient for mail from the character you are playing. Leave this blank to use the account default. An existing per-character recipient appears here. |
 
-If you had a shared default recipient in an older version, open **General** on the character that should use it. Hover over **Use previous recipient** to see the name, then click to save it for that character.
+For example, set **Account default** to **Oak** and your priest's **Character override** to **Ash**. Mail-marked gear with no matching rule goes to Ash from your priest and to Oak from your other characters. Clearing the priest's override sends that gear to Oak again.
+
+If **Cloth** goes to **Landmine Tailor**, a Mail-marked **Pattern: Red Linen Robe** follows it. To send the pattern elsewhere, open **Profession recipes** and enter a **Tailoring** recipient. A profession override takes priority, followed by **Recipe default**, then a related material recipient, then **Character override**, then **Account default**. Each blank profession field previews its inherited recipient when a recipe or material destination is available.
+
+Cooking recognizes ingredients even when they are filed as consumables, such as Raw Winter Squid. For shared ingredients, a configured material recipient takes priority. For example, Peacebloom used in tea still goes to your Herbs recipient. Finished meals follow your usual fallback unless they are ingredients themselves.
+
+For an exception, open **Item rules → Add rule**, enter an item ID or paste an item link, and set a **Mail recipient**. You can also open an item's editor from its bag menu. This destination takes priority over its category for every Mail-marked copy on your account.
+
+To review mail automations, select **Mail** under **All future marks**, then choose a character under **All mail recipients**. Each row shows where that item would go if marked for mail and which setting selected the recipient. Choose **Use mail settings** for inherited destinations or **Item-specific recipient** for per-item overrides. If automatic marks are paused, these recipients still apply to stacks you mark for mail. **Clear filters** restores the full list.
+
+Choose **Edit** on any row to change its mail recipient or its **Future copies** mark. For example, give Light Feather a Mail mark on your priest and set its recipient to your mage. Future marks apply when **Remember Mail and Junk by item type** is on for the account. To keep just one part of a rule, clear the other field and save. **Remove rule** clears both settings for that item. Stacks already in your bags retain their marks.
+
+Mark the stacks you want to mail. Hover over a marked stack to see its destination. If you mark Linen Cloth and a cloth robe, the cloth goes to your cloth recipient and the robe follows your default unless it has its own item rule. Items addressed to your current character or without a destination stay marked in your bags.
+
+Open **Send Mail**. BagMarks fills the recipient, attaches that character's eligible stacks up to the available slots, and fills a blank subject from the first attachment. Review the draft and click **Send**. After a successful send, BagMarks can prepare the next letter. Sending partway through a batch or removing an attachment pauses automatic batching.
+
+Turn off **Automatically attach marked items** to start each batch with **Attach Marked Items**. With **Automatically fill the To field** off, enter the recipient and click **Attach Marked Items**. The button uses that address to select matching stacks. BagMarks skips replies and preserves custom subjects.
+
+If you used a shared recipient in an older version, **Use previous recipient** in the Mail tab imports it into **Character override** for the character you are playing.
 
 ## A few things to know
 
 - **Locked items:** Equip, use, sort, and move them normally. Consumables can still be consumed. Clear the mark before selling, mailing, trading, or deleting them. Close merchant, mail, trade, and auction windows and finish item targeting before ordinary use. Some actions and addons bypass protection; see the [protection limits](docs/API_COMPATIBILITY.md).
-- Each character keeps its own item marks, remembered item types and default mail recipient. The switches for remembering, autofill and automatic attachment apply across the account.
-- **Combat:** Marking, keybinding changes, and sale/mail helpers pause. Settings remain accessible. Existing icons stay visible when readable; new slots may wait until combat ends.
+- Each character keeps its own item marks, remembered item types and character override. Category recipients, exact item recipients, the account default and automation preferences apply across the account.
+- Your configured mouse marking shortcut works on readable stacks in combat. If you choose **Shift + Left Click**, it uses your selected mark menu or cycle action. Keybinding changes, hover-key marking and sale/mail helpers resume after combat.
 - **EllesmereUI Bags:** Keep the icon column visible in List view. Combined stacks let you choose which individual stack to mark.
 
 ## Commands

@@ -1,6 +1,6 @@
 # Building and uploading BagMarks
 
-The current build is **1.0.5**, with per-character recipients and item rules, automatic mail attachments, and safeguards for shared merchant visits.
+The current build is **1.1.0**, with a searchable item rule manager, complete character names in the recipient picker, and three mark sizes.
 
 ## Build the upload file
 
@@ -16,13 +16,13 @@ This requires Python 3, Lua 5.1 and its compiler. If Lua is installed elsewhere:
 make package LUA=/path/to/lua5.1 LUAC=/path/to/luac5.1
 ```
 
-The result is **`dist/BagMarks-1.0.5.zip`**. The command runs static checks, the mocked addon tests, archive regression tests, and validation of the finished ZIP. A failed package validation leaves the previous ZIP intact. No game installation, other addon, or SavedVariables file is changed.
+The result is **`dist/BagMarks-1.1.0.zip`**. The command runs static checks, the mocked addon tests, archive regression tests, and validation of the finished ZIP. A failed package validation leaves the previous ZIP intact. No game installation, other addon, or SavedVariables file is changed.
 
 `python3 tools/package.py` creates and validates the ZIP without running the Lua checks or regression suites. Use `make package` for a release.
 
 ## Release from GitHub
 
-[Build and release](../.github/workflows/release.yml) runs automatically when a version tag such as `1.0.5` is pushed. It tests and builds the tagged addon, then publishes a GitHub release with the installable ZIP attached after the checks pass. Ordinary commits and pull requests do not start the workflow. The manual **Run workflow** button remains available for releases and retries.
+[Build and release](../.github/workflows/release.yml) runs automatically when a version tag such as `1.1.0` is pushed. It tests and builds the tagged addon, then publishes a GitHub release with the installable ZIP attached after the checks pass. Ordinary commits and pull requests do not start the workflow. The manual **Run workflow** button remains available for releases and retries.
 
 First commit and push the workflow, build scripts, and addon changes to the repository's default branch, `main`. The workflow must be on that branch for GitHub to show its manual run button.
 
@@ -31,7 +31,7 @@ To release entirely through the GitHub website:
 1. Open the repository's **Actions** tab.
 2. Select **Build and release** in the sidebar.
 3. Click **Run workflow** and choose **main**, or the branch containing the version you want to release.
-4. Enter **`1.0.5`** in the version field.
+4. Enter **`1.1.0`** in the version field.
 5. Click **Run workflow** to start the checks and release build.
 
 This uses GitHub's [manual workflow form](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow). For a new version, the workflow tests the selected branch's commit, creates its version tag, uploads the ZIP, and publishes the release. If that tag already exists, the workflow builds the tagged addon files using the updated release workflow from the selected branch. This lets you repair publishing after `main` has advanced, while keeping the release tied to its original source. The workflow never moves tags. Failed checks create neither a tag nor a release.
@@ -41,13 +41,13 @@ The Actions form can handle the whole release. If you already used GitHub's **Re
 You can also keep using terminal tags. From the committed version you want to release:
 
 ```sh
-git tag -a 1.0.5 -m "BagMarks 1.0.5"
-git push origin 1.0.5
+git tag -a 1.1.0 -m "BagMarks 1.1.0"
+git push origin 1.1.0
 ```
 
-Use a plain `major.minor.patch` tag, such as **`1.0.5`**, without a `v` prefix or prerelease suffix. The tag must match the versions in `BagMarks.toc` and `Core.lua`, and there must be a nonempty `## 1.0.5` section in `CHANGELOG.md`. The workflow stops if these disagree. The README is a player guide and needs no version update. The workflow does not change version numbers for you.
+Use a plain `major.minor.patch` tag, such as **`1.1.0`**, without a `v` prefix or prerelease suffix. The tag must match the versions in `BagMarks.toc` and `Core.lua`, and there must be a nonempty `## 1.1.0` section in `CHANGELOG.md`. The workflow stops if these disagree. The README is a player guide and needs no version update. The workflow does not change version numbers for you.
 
-After the checks pass, the workflow creates or completes the version's entry on the repository's **Releases** page and attaches **`BagMarks-1.0.5.zip`**. New release titles use **BagMarks 1.0.5**. New release notes come from that version's changelog section, with documentation links pointing to the same tag. Download the named addon ZIP from the release assets for installation or CurseForge submission; GitHub's automatic source archives contain the repository.
+After the checks pass, the workflow creates or completes the version's entry on the repository's **Releases** page and attaches **`BagMarks-1.1.0.zip`**. New release titles use **BagMarks 1.1.0**. New release notes come from that version's changelog section, with documentation links pointing to the same tag. Download the named addon ZIP from the release assets for installation or CurseForge submission; GitHub's automatic source archives contain the repository.
 
 Follow the run in the repository's **Actions** tab. Builds run with read access, and only the publishing job receives `contents: write`. The workflow uses GitHub's automatic token, so no personal access token or new repository secret is needed. GitHub Actions must be enabled, and any organization policy must allow the publishing job's permission. The official checkout and artifact actions are pinned to verified commit hashes.
 
@@ -57,7 +57,7 @@ Only a pushed version tag or an explicit manual release request can publish. The
 
 The November 15 run built and downloaded the addon successfully, then failed with **“a release with the same tag name already exists: 1.0.0.”** The existing release can be completed without deleting it or moving its tag.
 
-These recovery steps rebuild the original **1.0.0** source. To publish the current changes, use **1.0.5** as described above.
+These recovery steps rebuild the original **1.0.0** source. To publish the current changes, use **1.1.0** as described above.
 
 1. Commit and push the updated workflow and release tools to **main**.
 2. Open **Actions → Build and release → Run workflow**.
@@ -91,14 +91,14 @@ Commit and push `.pkgmeta` before creating the next version tag. In GitHub's **R
 
 Check **Settings → Webhooks → your CurseForge webhook → Recent deliveries** for a successful tag push with a `refs/tags/` reference. GitHub exposes the request and response in its [delivery details](https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/viewing-webhook-deliveries). Then check CurseForge for the generated file and its processing status. A successful webhook delivery does not itself confirm a successful build or approval.
 
-CurseForge builds directly from the tagged source. It does not upload `dist/BagMarks-1.0.5.zip`, run our build script, or wait for GitHub Actions tests. Run `make package` before tagging. The GitHub release workflow continues independently. CurseForge's game-version checks and approval still apply; confirm that the project supports **Forever 1.60.1 / Interface 16001** if packaging fails.
+CurseForge builds directly from the tagged source. It does not upload `dist/BagMarks-1.1.0.zip`, run our build script, or wait for GitHub Actions tests. Run `make package` before tagging. The GitHub release workflow continues independently. CurseForge's game-version checks and approval still apply; confirm that the project supports **Forever 1.60.1 / Interface 16001** if packaging fails.
 
 ## Manual upload to CurseForge
 
 1. Open the existing BagMarks project for World of Warcraft.
-2. Upload **`dist/BagMarks-1.0.5.zip`**, or the identically named addon asset from a successful GitHub release. Do not upload GitHub's source ZIP or the outer Actions artifact ZIP.
+2. Upload **`dist/BagMarks-1.1.0.zip`**, or the identically named addon asset from a successful GitHub release. Do not upload GitHub's source ZIP or the outer Actions artifact ZIP.
 3. Select the matching **Forever 1.60.1** game version in the upload form. The addon declares `Interface: 16001`; it is not a Classic Era or Retail build. If Forever is unavailable in that form, ask CurseForge support about the project configuration instead of choosing an unrelated client version.
-4. Use the version 1.0.5 notes in [CHANGELOG.md](../CHANGELOG.md) as the Markdown changelog. Keep the status as awaiting approval until CurseForge accepts the file.
+4. Use the version 1.1.0 notes in [CHANGELOG.md](../CHANGELOG.md) as the Markdown changelog. Keep the status as awaiting approval until CurseForge accepts the file.
 
 The archive has one top-level `BagMarks/` folder, with `BagMarks.toc` directly inside it. This follows CurseForge's [WoW archive guidance](https://support.curseforge.com/support/solutions/articles/9000196615-known-issues) and [TOC naming requirements](https://support.curseforge.com/support/solutions/articles/9000209856).
 

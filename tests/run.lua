@@ -226,7 +226,7 @@ test("Ellesmere marks, themes, tooltips and clearing update without a bag repain
     for _, state in ipairs({ "locked", "junk", "mail" }) do
         A.Store:Set(A.Bags:Read(button), state)
         assert(overlay.icon:IsShown())
-        GameTooltip:SetBagItem(0, 1); eq(GameTooltip.lines[1], "BagMarks: " .. A.states[state])
+        GameTooltip:SetBagItem(0, 1); eq(GameTooltip.lines[1], state == "mail" and "BagMarks: Mail (No recipient set)" or "BagMarks: " .. A.states[state])
     end
     A.SetOption("theme", "Minimal"); eq(overlay.icon.color[2], .8)
     A.SetOption("overlays", false); eq(overlay.icon:IsShown(), false)
@@ -351,6 +351,7 @@ test("Ellesmere selected marks feed sale and mail helpers without Locked copies"
     M.menu.children[3].choices[3].callback()
     M.ctrl, M.shift = false, false; merchant(); A.Operations:PreviewJunk(); confirm(); M.tick(1)
     eq(#M.sold, 1); eq(M.sold[1], "Item-1")
+    A.char.recipient = "Bankalt-Realm"
     A.merchantOpen = false; MerchantFrame:Hide(); mail(); A.Operations:AttachMail(); M.tick(1)
     eq(M.attachments[1].guid, "Item-3"); eq(M.bags[0][2].guid, "Item-2")
     eq(A.Store:Get("Item-2"), "locked")
@@ -512,13 +513,13 @@ test("mail helper attaches only eligible Mail, keeps marks, and fills empty reci
     mark("Item-A", 0, 5, "mail", { itemID = 103, account = true })
     A.Operations:AttachMail(); M.tick(1)
     eq(M.attachments[1].guid, "Item-M"); eq(M.attachments[2], nil)
-    eq(A.Store:Get("Item-M"), "mail"); eq(SendMailNameEditBox:GetText(), "Alt-Realm")
+    eq(A.Store:Get("Item-M"), "mail"); eq(SendMailNameEditBox:GetText(), "Alt")
     M.bags[0][3] = M.attachments[1]; M.attachments[1] = nil
     A.Store:RefreshInventory(); eq(A.Store:Get("Item-M"), "mail")
 end)
 
 test("mail attachment limit preserves existing attachments and remaining marked items", function()
-    mail(); SendMailNameEditBox:SetText("Chosen-Realm"); A.char.recipient = "Default"
+    mail(); SendMailNameEditBox:SetText("Chosen-Realm"); A.char.recipient = "Chosen-Realm"
     for i = 1, 11 do M.attachments[i] = { itemID = 99, count = 1 } end
     mark("Item-A", 0, 1, "mail"); mark("Item-B", 0, 2, "mail")
     A.Operations:AttachMail(); M.tick(1)
@@ -527,12 +528,14 @@ test("mail attachment limit preserves existing attachments and remaining marked 
 end)
 
 test("mail action rejection returns its cursor item and retains the mark", function()
+    A.char.recipient = "Bankalt-Realm"
     mail(); mark("Item-M", 0, 1, "mail"); M.rejectMail = true
     A.Operations:AttachMail(); M.tick(1)
     eq(M.cursor, nil); eq(M.bags[0][1].guid, "Item-M"); eq(A.Store:Get("Item-M"), "mail")
 end)
 
 test("mail rechecks each queued state and stops before a newly Locked item", function()
+    A.char.recipient = "Bankalt-Realm"
     mail(); mark("Item-A", 0, 1, "mail"); mark("Item-B", 0, 2, "mail")
     A.Operations:AttachMail(); A.Store:Set(A.API:Read(0, 2), "locked"); M.tick(1)
     eq(M.attachments[1].guid, "Item-A"); eq(M.attachments[2], nil); eq(M.bags[0][2].guid, "Item-B")
@@ -622,7 +625,7 @@ test("schema one migration preserves disabled settings and supplies new defaults
         modifier = "SHIFT", recipient = "Bankalt-Realm", theme = "Minimal" }
     BagMarksCharDB = { schema = 1, marks = { ["Item-L"] = { state = "locked", itemID = 100 } } }
     A.Store:Initialize()
-    eq(A.db.schema, 4); eq(A.char.schema, 4)
+    eq(A.db.schema, A.schema); eq(A.char.schema, A.schema)
     eq(A.db.enabled, false); eq(A.db.minimap, false); eq(A.db.tooltips, false); eq(A.db.overlays, false)
     eq(A.db.mouseButton, "RightButton"); eq(A.db.markingAction, "menu"); eq(A.db.autoFillRecipient, true)
     eq(A.db.modifier, "SHIFT"); eq(A.db.previousRecipient, "Bankalt-Realm"); eq(A.char.recipient, ""); eq(A.Store:Get("Item-L"), "locked")
@@ -757,7 +760,7 @@ test("recipient fills on opening Send Mail before attaching anything", function(
     A.eventFrame:Fire("OnEvent", "MAIL_SHOW"); M.tick(0)
     eq(SendMailNameEditBox:GetText(), "")
     SendMailNameEditBox.focus = true; SendMailFrame:Show(); M.tick(0)
-    eq(SendMailNameEditBox:GetText(), "Bankalt-Realm"); eq(SendMailNameEditBox.highlighted, true)
+    eq(SendMailNameEditBox:GetText(), "Bankalt"); eq(SendMailNameEditBox.highlighted, true)
     eq(next(M.attachments), nil)
 end)
 
@@ -778,7 +781,7 @@ test("recipient typing before deferred autofill and deliberate clearing are resp
     SendMailFrame:Hide(); SendMailFrame:Show(); M.tick(0)
     eq(SendMailNameEditBox:GetText(), "")
     mark("Item-M", 0, 1, "mail"); A.Operations:AttachMail(); M.tick(1)
-    eq(SendMailNameEditBox:GetText(), ""); eq(M.attachments[1].guid, "Item-M")
+    eq(SendMailNameEditBox:GetText(), ""); eq(M.attachments[1], nil)
 end)
 
 test("successful send starts a new default recipient after Blizzard resets the form", function()
@@ -786,7 +789,7 @@ test("successful send starts a new default recipient after Blizzard resets the f
     SendMailNameEditBox:SetText("Manual"); SendMailNameEditBox:Fire("OnTextChanged", true)
     A.eventFrame:Fire("OnEvent", "MAIL_SEND_SUCCESS")
     SendMailNameEditBox:SetText(""); SendMailNameEditBox.focus = true -- Blizzard's event handler may run after ours.
-    M.tick(0); eq(SendMailNameEditBox:GetText(), "Default-Realm")
+    M.tick(0); eq(SendMailNameEditBox:GetText(), "Default")
     A.eventFrame:Fire("OnEvent", "MAIL_SEND_SUCCESS")
     SendMailNameEditBox:SetText(""); SendMailNameEditBox:Fire("OnTextChanged", true)
     M.tick(0); eq(SendMailNameEditBox:GetText(), "")
@@ -800,18 +803,18 @@ test("autofill can be disabled and queued fills cannot outlive the mailbox", fun
     A.eventFrame:Fire("OnEvent", "MAIL_CLOSED"); M.tick(0)
     eq(SendMailNameEditBox:GetText(), "")
     A.eventFrame:Fire("OnEvent", "MAIL_SHOW"); M.tick(0)
-    eq(SendMailNameEditBox:GetText(), "Default-Realm")
+    eq(SendMailNameEditBox:GetText(), "Default")
 end)
 
 test("changing the default only fills an empty unedited compose field after editing ends", function()
-    mail(); A.Settings:Toggle()
+    mail(); A.Settings:Toggle(); A.Settings:SelectTab("Mail")
     local field = A.Settings.recipient
     field.focus = true; field:SetText("Newdefault-Realm"); field:Fire("OnTextChanged", true)
     M.tick(0) -- An earlier OnShow callback must not use a partly edited default.
     eq(SendMailNameEditBox:GetText(), "")
-    field:ClearFocus(); M.tick(0); eq(SendMailNameEditBox:GetText(), "Newdefault-Realm")
+    field:ClearFocus(); M.tick(0); eq(SendMailNameEditBox:GetText(), "Newdefault")
     field.focus = true; field:SetText("Another-Realm"); field:Fire("OnTextChanged", true)
-    field:ClearFocus(); M.tick(0); eq(SendMailNameEditBox:GetText(), "Newdefault-Realm")
+    field:ClearFocus(); M.tick(0); eq(SendMailNameEditBox:GetText(), "Newdefault")
 end)
 
 test("sending during an attachment queue does not attach leftovers to the next draft", function()
@@ -822,7 +825,7 @@ test("sending during an attachment queue does not attach leftovers to the next d
     M.attachments = {}; SendMailNameEditBox:SetText(""); M.tick(1)
     eq(A.Operations.job, nil); eq(next(M.attachments), nil)
     eq(M.bags[0][2].guid, "Item-B"); eq(A.Store:Get("Item-B"), "mail")
-    eq(SendMailNameEditBox:GetText(), "Bankalt-Realm")
+    eq(SendMailNameEditBox:GetText(), "Bankalt")
 end)
 
 test("Ellesmere-style hidden buttons stay hidden through inventory and theme refreshes", function()
@@ -902,6 +905,7 @@ dofile("tests/reusable.lua")(M, A, test, eq, mark)
 dofile("tests/mail_context.lua")(M, A, test, eq, mark)
 dofile("tests/mail_compose.lua")(M, A, test, eq, mark)
 dofile("tests/mail_characters.lua")(M, A, test, eq, mark)
+dofile("tests/mail_routes.lua")(M, A, test, eq, mark)
 dofile("tests/item_memory.lua")(M, A, test, eq, mark)
 dofile("tests/autosell.lua")(M, A, test, eq, mark)
 dofile("tests/combat_icons.lua")(M, A, test, eq, mark)

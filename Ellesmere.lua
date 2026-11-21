@@ -51,7 +51,7 @@ end
 
 function Ellesmere:GroupItems(item, fresh)
     if not item or not item.link then return {} end
-    local items = fresh and A.API:Scan(true) or A.inventory or {}
+    local items = fresh and A.API:Scan(true, true) or A.inventory or {}
     local inBags, matches = carried(item.bag), {}
     for _, candidate in pairs(items) do
         -- Ellesmere groups matching links, not every variant of an item ID.

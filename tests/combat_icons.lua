@@ -21,7 +21,93 @@ return function(M, A, test, eq, mark)
             info = item and { itemID = item.itemID }, itemLink = item and item.link, _mergedCount = total })
     end
 
-    test("combat keeps all mark icons visible with click capture disabled", function()
+    test("Shift + Left Click cycles a combat stack and passes other buttons and chords to the game", function()
+        local _, button = slot(nil)
+        M.bags[0][1].count = 5
+        local splits = 0
+        button:SetScript("OnClick", function(_, click)
+            if M.shift and click == "LeftButton" then splits = splits + 1 end
+        end)
+        local function click(mouse)
+            local input = A.Bags.combatInput
+            if input and input:IsVisible() then
+                local passes = false
+                for _, other in ipairs(input.passthrough) do if other == mouse then passes = true end end
+                if not passes then input:Fire("OnClick", mouse); return end
+            end
+            button:Fire("OnClick", mouse)
+        end
+        A.db.modifier, A.db.mouseButton, A.db.markingAction = "SHIFT", "LeftButton", "cycle"
+        combat(); eq(A.Bags.combatInput, nil)
+        M.shift, M.mouseFoci = true, { button }
+        A.eventFrame:Fire("OnEvent", "MODIFIER_STATE_CHANGED")
+        local input = A.Bags.combatInput
+        assert(input:IsVisible()); eq(input.owner, button); eq(input.motion, false)
+        M.mouseFoci = { input, button }
+        click("RightButton"); eq(A.Store:Get("Item-A"), nil)
+        for _, state in ipairs({ "locked", "junk", "mail" }) do
+            click("LeftButton"); eq(A.Store:Get("Item-A"), state)
+        end
+        eq(splits, 0); eq(M.bags[0][1].count, 5)
+        M.ctrl = true; A.eventFrame:Fire("OnEvent", "MODIFIER_STATE_CHANGED")
+        eq(input:IsShown(), false); click("LeftButton"); eq(splits, 1)
+        leaveCombat(); eq(A.Bags.combatInput, nil)
+    end)
+
+    test("combat marking follows the foreground slot, ignores typing and rechecks a menu's GUID", function()
+        A.db.modifier, A.db.mouseButton, A.db.markingAction = "SHIFT", "LeftButton", "menu"
+        local _, button = slot(nil)
+        M.shift, M.mouseFoci = true, { button }
+        combat()
+        local entered = M.button(0, 2)
+        M.item("Item-New", 0, 2)
+        ContainerFrameItemButtonMixin.Initialize(entered, nil, 0, 2)
+        M.mouseFoci = { entered }; A.Bags.combatDriver:Fire("OnUpdate")
+        eq(A.Bags.combatInput.owner, entered)
+        M.keyboardFocus = SendMailNameEditBox; A.Bags.combatDriver:Fire("OnUpdate"); eq(A.Bags.combatInput, nil)
+        M.keyboardFocus, M.targeting = nil, true
+        A.Bags.combatDriver:Fire("OnUpdate"); eq(A.Bags.combatInput, nil)
+        M.targeting, M.cursor = false, {}; A.eventFrame:Fire("OnEvent", "CURSOR_CHANGED"); eq(A.Bags.combatInput, nil)
+        M.cursor = nil; M.mouseFoci = { A.Settings.frame, entered }
+        A.Bags.combatDriver:Fire("OnUpdate"); eq(A.Bags.combatInput, nil)
+        M.mouseFoci = { entered }; A.Bags.combatDriver:Fire("OnUpdate")
+        A.Bags.combatInput:Fire("OnClick", "LeftButton"); eq(M.menu.owner, entered)
+        M.bags[0][3] = M.bags[0][2]; M.item("Item-Replacement", 0, 2)
+        M.menu.choices[3].callback()
+        eq(A.Store:Get("Item-New"), "mail"); eq(A.Store:Get("Item-Replacement"), nil)
+        A.SetOption("enabled", false); eq(A.Bags.combatInput, nil)
+    end)
+
+    test("teaching a combat mark preserves existing copies and unrelated restricted observations", function()
+        local old = mark("Item-Unreadable", 0, 3, "junk", { itemID = 50 })
+        A.SetOption("rememberItemTypes", true)
+        local stack = M.item("Item-Scroll", 0, 1, { itemID = 211780 })
+        local copy = M.item("Item-ExistingScroll", 0, 2, { itemID = 211780 })
+        local button = M.button(0, 1); A.Bags:Discover()
+        A.db.modifier, A.db.mouseButton = "SHIFT", "LeftButton"
+        M.shift, M.mouseFoci = true, { button }; combat()
+        old.secretID = M.secret
+        A.Bags.combatInput:Fire("OnClick", "LeftButton"); M.menu.choices[3].callback()
+        eq(A.Store:Get(stack.guid), "mail"); eq(A.char.itemRules[211780], "mail")
+        eq(A.char.observed[old.guid].itemID, 50); eq(A.Store:Get(copy.guid), nil)
+        local fresh = M.item("Item-FreshScroll", 0, 4, { itemID = 211780 })
+        old.secretID = nil; leaveCombat()
+        eq(A.Store:Get(fresh.guid), "mail"); eq(A.Store:Get(copy.guid), nil)
+    end)
+
+    test("merged Ellesmere stacks still select one copy on a combat marking click", function()
+        M.ellesmere(); A.Bags:InstallHooks()
+        M.item("Item-First", 0, 1, { count = 3 }); M.item("Item-Second", 0, 2, { count = 2 })
+        local button = M.ellesmereButton(0, 1, true); paint(button, 5)
+        A.db.modifier, A.db.mouseButton, A.db.markingAction = "SHIFT", "LeftButton", "cycle"
+        M.shift, M.mouseFoci = true, { button }
+        combat(); A.Bags.combatInput:Fire("OnClick", "LeftButton")
+        eq(#M.menu.children, 2); M.menu.children[2].choices[3].callback()
+        eq(A.Store:Get("Item-Second"), "mail"); eq(A.Store:Get("Item-First"), nil)
+        button._textOverlay:Hide(); A.Bags.combatDriver:Fire("OnUpdate"); eq(A.Bags.combatInput, nil)
+    end)
+
+    test("combat keeps all mark icons visible without an active marking chord", function()
         local overlays = {}
         for index, state in ipairs({ "locked", "junk", "mail" }) do
             mark("Item-" .. index, 0, index, state)

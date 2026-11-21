@@ -248,6 +248,7 @@ return function(M, A, test, eq, mark)
     test("unheld Locked reusable items remain excluded from sale and mail helpers", function()
         local item = reusable()
         mark("Item-Junk", 0, 2, "junk", { itemID = 101 })
+        A.char.recipient = "Bankalt-Realm"
         local mailed = mark("Item-Mail", 0, 3, "mail", { itemID = 102 })
         eq(item.held, nil)
         local entries = A.Operations:CollectJunk()

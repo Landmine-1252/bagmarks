@@ -318,6 +318,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("other sellers using slot use or pickup leave Mail items available for the next draft", function()
+        A.char.recipient = "Bankalt-Realm"
         local first = mark("Item-First", 0, 1, "mail", { itemID = 17056 })
         A.SetOption("rememberItemTypes", true); A.Store:Set(A.API:Read(0, 1), "mail")
         local second = M.item("Item-Later", 0, 2, { itemID = 17056 })

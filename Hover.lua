@@ -71,14 +71,12 @@ function Hover:Create()
     self.driver = driver
     -- Passive art beside the pointer. Do not replace the game cursor, which
     -- also communicates targeting, dragging, and other native interactions.
-    local badge = CreateFrame("Frame", nil, driver)
+    local badge = CreateFrame("Frame", nil, driver, "BackdropTemplate")
     badge:SetFrameStrata("TOOLTIP")
     badge:EnableMouse(false)
     badge:SetSize(88, 24)
     badge:SetClampedToScreen(true)
-    local background = badge:CreateTexture(nil, "BACKGROUND")
-    background:SetAllPoints(badge)
-    background:SetColorTexture(0, 0, 0, .8)
+    A.UI.Skin(badge, "window", "accent")
     local icon = badge:CreateTexture(nil, "ARTWORK")
     icon:SetSize(18, 18)
     icon:SetPoint("LEFT", 3, 0)

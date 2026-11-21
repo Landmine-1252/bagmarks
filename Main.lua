@@ -30,6 +30,21 @@ local function closeMail()
     end
 end
 
+function A.Mail:OpenMailbox()
+    local opening = not A.mailOpen
+    A.mailOpen = true
+    if opening then A.Protection:Refresh() end
+    self:InstallHooks()
+    if opening and A.mailOpen then self:NewDraft(true) end
+    A.Operations:CreateButtons()
+    queueRefresh()
+end
+
+local function isMailboxInteraction(kind)
+    local mailType = Enum and Enum.PlayerInteractionType and Enum.PlayerInteractionType.MailInfo
+    return A.Safe(kind) and type(kind) == "number" and A.Safe(mailType) and kind == mailType
+end
+
 local function reconcileMail()
     -- The MAIL_SHOW flag can outlive the actual mailbox interaction.
     -- Only an explicit false clears the flag; a hidden custom UI or unavailable
@@ -46,7 +61,7 @@ function A.Slash(message)
     elseif command == "debug" then A.Diagnostics:Open(message:match("^%s*%S+%s*(.-)%s*$"))
     elseif command == "reset" then
         local shortcut = A.Interaction.modifierLabels[A.defaults.modifier] .. " + " .. A.Interaction.buttonLabels[A.defaults.mouseButton]
-        A.UI:Confirm("Reset BagMarks settings", "Restore account preferences and clear this character's default recipient?\n\nItem marks, remembered item types and Blizzard keybindings will be kept.\n\nDefault theme: " .. A.defaults.theme .. "\nDefault shortcut: " .. shortcut, "Reset settings", function() A.Store:ResetSettings() end)
+        A.UI:Confirm("Reset BagMarks settings", "Restore account preferences and clear all shared mail recipients, including the account default? This also clears the mail override for this character.\n\nYour item marks, remembered item types and keybindings will be kept.\n\nDefault theme: " .. A.defaults.theme .. "\nDefault shortcut: " .. shortcut, "Reset settings", function() A.Store:ResetSettings() end)
     else
         A.Print("/bm or /bagmarks: Settings; /bm mode: Marking mode; /bm minimap: Minimap button; /bm theme: Cycle themes; /bm reset: Reset preferences; /bm debug or /bmcheck: Copyable diagnostics; /bm help: This reference.")
     end
@@ -91,12 +106,20 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         return
     end
     if not A.ready then return end
-    if event == "DELETE_ITEM_CONFIRM" then
+    if event == "UNIT_NAME_UPDATE" and (not A.Safe(arg1) or arg1 ~= "player") then return end
+    if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "UNIT_NAME_UPDATE" then
+        A.MailRoutes:RememberPlayer()
+        A.Settings:RulesChanged()
+        if A.Mail.pending and A.Mail.pending.waitingForSender then A.Mail:QueueDraftUpdate() end
+        if event ~= "UNIT_NAME_UPDATE" then queueRefresh() end
+    elseif event == "DELETE_ITEM_CONFIRM" then
         -- The fifth event argument is the optional GUID being deleted. Return
         -- the cursor now rather than waiting for a deferred inventory refresh.
         A.Protection:ReturnCursor(arg5, true)
         A.Protection:SyncHolds()
     elseif event == "PLAYER_LOGOUT" then
+        local field = A.Settings:EditingRecipient()
+        if field then field:ClearFocus() end
         A.Operations:Cancel()
         A.Protection:Stop()
     elseif event == "PLAYER_REGEN_DISABLED" then
@@ -108,6 +131,8 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         A.Minimap:StopDrag()
         A.Refresh()
     elseif event == "PLAYER_REGEN_ENABLED" then
+        A.Bags:CreateCombatInput()
+        A.Bags:RefreshCombatInput()
         A.Operations:CreateButtons()
         A.Mail:QueueDraftUpdate()
         queueRefresh()
@@ -139,20 +164,12 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         A.Bags:Refresh()
     elseif event == "TRADE_PLAYER_ITEM_CHANGED" or event == "TRADE_ACCEPT_UPDATE" or event == "TRADE_UPDATE" then
         A.Protection:CheckTrade()
-    elseif event == "MAIL_SHOW" then
-        local opening = not A.mailOpen
-        A.mailOpen = true
-        A.Protection:Refresh()
-        A.Mail:InstallHooks()
-        if opening and A.mailOpen then A.Mail:NewDraft(true) end
-        A.Operations:CreateButtons()
-        queueRefresh()
+    elseif event == "MAIL_SHOW" or event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" then
+        if event == "MAIL_SHOW" or isMailboxInteraction(arg1) then A.Mail:OpenMailbox() end
     elseif event == "MAIL_CLOSED" then
         closeMail()
     elseif event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then
-        local mailType = Enum and Enum.PlayerInteractionType and Enum.PlayerInteractionType.MailInfo
-        if A.Safe(arg1) and type(arg1) == "number" and A.Safe(mailType) and type(mailType) == "number"
-            and arg1 == mailType and A.mailOpen then
+        if isMailboxInteraction(arg1) and A.mailOpen then
             reconcileMail()
             -- Hide notifications can precede the client's interaction update.
             -- Re-read next frame; a mailbox reopened meanwhile stays protected.
@@ -160,7 +177,12 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         end
     elseif event == "MAIL_SEND_SUCCESS" then
         A.Operations:Cancel(nil, "mail")
-        A.Mail:NewDraft()
+        A.Mail:Sent()
+    elseif event == "MAIL_FAILED" then
+        local sending = A.Mail.sending
+        A.Mail.sending, A.Mail.submission, A.Mail.continueAfterSend = nil, nil, nil
+        if sending and A.API:ComposeOpen() and SendMailFrame_CanSend then SendMailFrame_CanSend() end
+        A.Operations:RefreshButtons()
     elseif event == "MAIL_SEND_INFO_UPDATE" then
         A.Protection:CheckMail()
         A.Mail:QueueDraftUpdate()
@@ -179,6 +201,7 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         queueRefresh()
     elseif event == "CURSOR_CHANGED" then
         A.Protection:QueueCursorCheck()
+        A.Bags:RefreshCombatInput()
     elseif event == "MODIFIER_STATE_CHANGED" or event == "CURRENT_SPELL_CAST_CHANGED" then
         if event ~= "MODIFIER_STATE_CHANGED" then A.Protection:SyncHolds() end
         A.Bags:Refresh()
@@ -188,8 +211,9 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
     elseif event == "UI_ERROR_MESSAGE" then
         if A.Operations.job then A.Operations:Cancel("The client reported an error. Remaining markings were kept.") end
     else
-        if A.Mail.provisionalSubject and (event == "GET_ITEM_INFO_RECEIVED" or event == "ITEM_DATA_LOAD_RESULT") then
-            A.Mail:QueueDraftUpdate()
+        if event == "GET_ITEM_INFO_RECEIVED" or event == "ITEM_DATA_LOAD_RESULT" then
+            A.Settings:RuleItemLoaded(arg1, arg2)
+            if A.Mail.provisionalSubject then A.Mail:QueueDraftUpdate() end
         end
         if event == "BAG_UPDATE_DELAYED" and A.merchantOpen and A.db.rememberItemTypes and next(A.char.itemRules) then
             -- Reserve newly acquired Mail stacks before other sellers' deferred passes.
@@ -197,19 +221,22 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4, arg5)
         end
         if event == "ITEM_LOCK_CHANGED" or event == "BAG_UPDATE_DELAYED" then A.Protection:SyncHolds() end
         if event == "BAG_UPDATE_DELAYED" then A.Protection:CheckBuyback() end
+        if event == "BAG_UPDATE_DELAYED" and A.Mail.pending and (A.Mail.pending.waitingForSender or A.Mail.pending.waitingForSlots) then
+            A.Mail:QueueDraftUpdate()
+        end
         queueRefresh()
     end
 end)
 
 for _, event in ipairs({
-    "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_LOGOUT", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "UNIT_NAME_UPDATE", "PLAYER_LOGOUT", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
     "BAG_UPDATE_DELAYED", "BAG_CONTAINER_UPDATE", "BAG_OPEN", "BAG_CLOSED", "ITEM_LOCK_CHANGED",
     "PLAYERBANKSLOTS_CHANGED", "PLAYER_ACCOUNT_BANK_TAB_SLOTS_CHANGED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED",
-    "MERCHANT_SHOW", "MERCHANT_CLOSED", "MERCHANT_UPDATE", "MAIL_SHOW", "MAIL_CLOSED", "MAIL_SEND_INFO_UPDATE", "MAIL_SEND_SUCCESS",
+    "MERCHANT_SHOW", "MERCHANT_CLOSED", "MERCHANT_UPDATE", "MAIL_SHOW", "MAIL_CLOSED", "MAIL_SEND_INFO_UPDATE", "MAIL_SEND_SUCCESS", "MAIL_FAILED",
     "MODIFIER_STATE_CHANGED", "CURSOR_CHANGED", "UPDATE_BINDINGS", "UI_ERROR_MESSAGE",
     "DELETE_ITEM_CONFIRM", "TRADE_SHOW", "TRADE_CLOSED", "TRADE_PLAYER_ITEM_CHANGED", "TRADE_ACCEPT_UPDATE", "TRADE_UPDATE",
     "CURRENT_SPELL_CAST_CHANGED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",
-    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
+    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
 }) do
     -- Event names can differ between client revisions; capability failure is nonfatal.
     pcall(frame.RegisterEvent, frame, event)
@@ -225,7 +252,7 @@ frame:SetScript("OnUpdate", function(_, delta)
     if elapsed < .2 then return end
     elapsed = 0
     -- This is one read-only query only while mail is considered open, including
-    -- combat. Marking and inventory discovery still obey the usual combat gate.
+    -- combat. Periodic inventory discovery resumes after combat.
     reconcileMail()
     if not A.CanAct() then return end
     A.Bags:Discover()

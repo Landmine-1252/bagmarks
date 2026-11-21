@@ -12,6 +12,35 @@ return function(M, A, test, eq, mark)
         return mark("Item-SleepingBag", 0, 1, "locked", { itemID = 211527, spellID = 429961 })
     end
 
+    test("the modern mailbox event opens a draft once across both open notifications", function()
+        A.char.recipient = "Bankalt-Realm"
+        local item = mark("Item-ModernMail", 0, 1, "mail")
+        M.mailActive = true
+        assert(A.eventFrame.events.PLAYER_INTERACTION_MANAGER_FRAME_SHOW)
+        event("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 999)
+        eq(A.mailOpen, false)
+        event("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", Enum.PlayerInteractionType.MailInfo)
+        eq(A.mailOpen, true); M.tick(0); eq(next(M.attachments), nil)
+        SendMailFrame:Show(); M.tick(1)
+        eq(SendMailNameEditBox:GetText(), "Bankalt"); eq(M.attachments[1], item)
+        ClickSendMailItemButton(1, true)
+        SendMailNameEditBox:SetText(""); SendMailNameEditBox:Fire("OnTextChanged", true)
+        event("MAIL_SHOW")
+        event("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", Enum.PlayerInteractionType.MailInfo)
+        M.tick(1); eq(SendMailNameEditBox:GetText(), ""); eq(next(M.attachments), nil)
+    end)
+
+    test("opening Send Mail can recover an already active mailbox", function()
+        A.char.recipient = "Bankalt-Realm"
+        local item = mark("Item-LateMail", 0, 1, "mail")
+        M.mailActive = false
+        SendMailFrame:Show(); M.tick(1)
+        eq(A.mailOpen, false); eq(next(M.attachments), nil)
+        SendMailFrame:Hide(); M.mailActive = true
+        SendMailFrame:Show(); M.tick(1)
+        eq(SendMailNameEditBox:GetText(), "Bankalt"); eq(M.attachments[1], item)
+    end)
+
     test("missed mailbox close releases reusable holds while retaining Locked marks", function()
         M.reentrantLocks = true
         local sleeping = bag()
@@ -96,6 +125,7 @@ return function(M, A, test, eq, mark)
     end)
 
     test("a missed mailbox close cancels attachments and retains unsent marks", function()
+        A.char.recipient = "Bankalt-Realm"
         bag()
         mark("Item-Mail1", 0, 2, "mail", { itemID = 101 })
         local remaining = mark("Item-Mail2", 0, 3, "mail", { itemID = 102 })

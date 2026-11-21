@@ -1,0 +1,478 @@
+return function(M, A, test, eq, mark)
+    local function event(name, ...) A.eventFrame:Fire("OnEvent", name, ...) end
+    local function openDraft()
+        event("MAIL_SHOW"); SendMailFrame:Show(); M.tick(3)
+    end
+    local function clickSend()
+        M.playerSending = true; SendMailFrame_SendMail(); M.playerSending = nil
+    end
+    local function success()
+        event("MAIL_SEND_SUCCESS")
+        M.attachments = {}; SendMailNameEditBox:SetText(""); SendMailSubjectEditBox:SetText("")
+        M.tick(3)
+    end
+    local function stack(slot, id, class, subclass, state)
+        return mark("Item-Route" .. slot, 0, slot, state or "mail", { itemID = id, class = class, subclass = subclass })
+    end
+    local function field(key)
+        for _, edit in ipairs(A.Settings.addressFields) do
+            if edit.key == key then return edit end
+        end
+        error("Missing address field " .. key)
+    end
+
+    test("material recipients share letters by address and advance only after successful send", function()
+        A.Store:SetMailRoute("cloth", "Tailor"); A.Store:SetMailRoute("metal", "Smith")
+        A.Store:SetMailRoute("leather", "Tailor"); A.Store:SetMailRoute("herbs", "Herbalist")
+        A.Store:SetMailRoute("bank", "Bank")
+        local linen = stack(1, 2589, 7, 5)
+        local ore = stack(2, 2770, 7, 7)
+        local hide = stack(3, 783, 7, 6)
+        local herb = stack(4, 2447, 7, 9)
+        local robe = stack(5, 6238, 4, 1)
+        local unmarked = M.item("Item-Unmarked", 0, 6, { itemID = 2589, class = 7, subclass = 5 })
+        local junk = stack(7, 2771, 7, 7, "junk")
+        openDraft()
+        eq(SendMailNameEditBox:GetText(), "Tailor")
+        eq(M.attachments[1], linen); eq(M.attachments[2], hide); eq(M.attachments[3], nil)
+        clickSend(); event("MAIL_FAILED"); M.tick(3)
+        eq(M.bags[0][2], ore); eq(M.attachments[1], linen)
+        for _, group in ipairs({ { "Smith", ore }, { "Herbalist", herb }, { "Bank", robe } }) do
+            clickSend(); success()
+            eq(SendMailNameEditBox:GetText(), group[1]); eq(M.attachments[1], group[2]); eq(M.attachments[2], nil)
+        end
+        clickSend(); success(); eq(next(M.attachments), nil)
+        eq(M.bags[0][6], unmarked); eq(M.bags[0][7], junk)
+    end)
+
+    test("overflow continues in another envelope and only consumes eligible carried slots", function()
+        A.Store:SetMailRoute("cloth", "Tailor")
+        for slot = 1, ATTACHMENTS_MAX_SEND + 1 do stack(slot, 2589, 7, 5) end
+        local ore = stack(14, 2770, 7, 7)
+        local bound = stack(15, 2592, 7, 5); bound.bound = true
+        local busy = stack(16, 4306, 7, 5); busy.busy = true
+        openDraft()
+        eq(#M.attachments, ATTACHMENTS_MAX_SEND); eq(M.bags[0][13].guid, "Item-Route13")
+        clickSend(); success()
+        eq(SendMailNameEditBox:GetText(), "Tailor"); eq(M.attachments[1].guid, "Item-Route13")
+        eq(M.attachments[2], nil); eq(M.bags[0][14], ore); eq(M.bags[0][15], bound); eq(M.bags[0][16], busy)
+    end)
+
+    test("self, unknown data and unassigned items stay marked until a destination is available", function()
+        local cloth = stack(1, 2589, 7, 5)
+        local herb = stack(2, 2447, 7, 9)
+        openDraft(); eq(next(M.attachments), nil); eq(SendMailNameEditBox:GetText(), "")
+        A.Store:SetMailRoute("cloth", "sender")
+        A.Store:SetMailRoute("bank", "Bank")
+        A.char.recipient = "SenderBank"
+        herb.missingClass = true
+        A.Operations:AttachMail(); M.tick(1)
+        eq(next(M.attachments), nil); eq(A.MailRoutes:Tooltip(cloth.itemID), "Mail (Keep on this character)")
+        eq(A.MailRoutes:Tooltip(herb.itemID), "Mail (Item category unknown)")
+        herb.missingClass = nil; A.Operations:AttachMail(); M.tick(1)
+        eq(SendMailNameEditBox:GetText(), "SenderBank"); eq(M.attachments[1], herb)
+        eq(M.bags[0][1], cloth); eq(A.Store:Get(cloth.guid), "mail")
+    end)
+
+    test("a changed To or route during attachment stops the batch and cannot mix letters", function()
+        A.Store:SetMailRoute("cloth", "Tailor"); A.Store:SetMailRoute("metal", "Smith")
+        local linen = stack(1, 2589, 7, 5)
+        local wool = stack(2, 2592, 7, 5)
+        local ore = stack(3, 2770, 7, 7)
+        event("MAIL_SHOW"); SendMailFrame:Show(); M.tick(0); eq(M.attachments[1], linen)
+        A.Store:SetMailRoute("cloth", "Weaver"); M.tick(1)
+        eq(A.Operations.job, nil); eq(M.bags[0][2], wool)
+        SendMailNameEditBox:SetText("Smith"); SendMailNameEditBox:Fire("OnTextChanged", true)
+        A.Operations:AttachMail(); M.tick(1); eq(M.attachments[2], nil); eq(M.bags[0][3], ore)
+        ClickSendMailItemButton(1, true); A.Operations:AttachMail(); M.tick(1)
+        eq(M.attachments[1], ore); eq(M.attachments[2], nil)
+    end)
+
+    test("an explicitly addressed draft accepts matching routes with autofill off and leaves replies alone", function()
+        A.db.autoFillRecipient = false
+        A.Store:SetMailRoute("cloth", "Tailor"); A.Store:SetMailRoute("metal", "Smith-Elsewhere")
+        local linen = stack(1, 2589, 7, 5)
+        local ore = stack(2, 2770, 7, 7)
+        openDraft(); eq(next(M.attachments), nil)
+        SendMailNameEditBox:SetText("SMITH-Realm"); A.Operations:AttachMail(); eq(next(M.attachments), nil)
+        SendMailNameEditBox:SetText("sMiTh-Elsewhere"); SendMailFrame.sendMode = "reply"
+        A.Operations:AttachMail(); eq(next(M.attachments), nil)
+        SendMailFrame.sendMode = "send"; A.Operations:AttachMail(); M.tick(2)
+        eq(M.attachments[1], ore); eq(M.bags[0][1], linen); eq(SendMailNameEditBox:GetText(), "sMiTh-Elsewhere")
+    end)
+
+    test("typing a name after a realm change matches the complete surname and preserves the draft's recipient", function()
+        local address = "Landmine Ill-CAMWOWUS1Realm9RPPvP"
+        M.realm = "CAMWOWUS1Realm12RPPvP"
+        A.db.autoFillRecipient = false
+        A.Store:SetMailRoute("cloth", address)
+        A.Store:SetMailRoute("herbs", "Landmine Ivy")
+        local cloth = stack(1, 2589, 7, 5)
+        local herb = stack(2, 2447, 7, 9)
+        openDraft()
+        SendMailNameEditBox:SetText("Landmine"); A.Operations:AttachMail(); M.tick(1)
+        eq(next(M.attachments), nil)
+        SendMailNameEditBox:SetText("landmine ill"); A.Operations:AttachMail(); M.tick(1)
+        eq(A.Mail.batchRecipient, address); eq(M.attachments[1], cloth); eq(M.attachments[2], nil)
+        eq(SendMailNameEditBox:GetText(), "landmine ill")
+        SendMailNameEditBox:SetText("Landmine Ivy"); A.Operations:AttachMail(); M.tick(1)
+        eq(M.bags[0][2], herb); eq(M.attachments[2], nil)
+    end)
+
+    test("an existing envelope with attachments and an empty To is never assigned a new destination", function()
+        A.Store:SetMailRoute("cloth", "Tailor")
+        local linen = stack(1, 2589, 7, 5)
+        local existing = { itemID = 10, count = 1 }
+        M.attachments[2] = existing
+        openDraft(); A.Operations:AttachMail(); M.tick(1)
+        eq(SendMailNameEditBox:GetText(), ""); eq(M.attachments[2], existing); eq(M.bags[0][1], linen)
+    end)
+
+    test("removing a stack or editing To while attaching requires an explicit new batch", function()
+        A.Store:SetMailRoute("cloth", "Tailor")
+        local linen = stack(1, 2589, 7, 5)
+        local wool = stack(2, 2592, 7, 5)
+        event("MAIL_SHOW"); SendMailFrame:Show(); M.tick(0)
+        SendMailNameEditBox:SetText("Other"); SendMailNameEditBox:Fire("OnTextChanged", true); M.tick(2)
+        eq(A.Operations.job, nil); eq(M.attachments[1], linen); eq(M.bags[0][2], wool)
+        SendMailNameEditBox:SetText("Tailor"); A.Operations:AttachMail(); M.tick(2)
+        eq(M.attachments[2], wool)
+        ClickSendMailItemButton(1, true); clickSend(); A.Operations:AttachMail()
+        eq(M.attachments[1], nil); success()
+        eq(next(M.attachments), nil); eq(A.Store:Get(linen.guid), "mail")
+        A.Operations:AttachMail(); M.tick(2); eq(M.attachments[1], linen)
+    end)
+
+    test("missing and restricted classifications never route a possible material to the bank alt", function()
+        A.Store:SetMailRoute("cloth", "Tailor"); A.Store:SetMailRoute("bank", "Bank")
+        local cloth = stack(1, 2589, 7, 5)
+        cloth.class = M.secret; openDraft()
+        eq(M.bags[0][1], cloth); eq(next(M.attachments), nil)
+        local query = C_Item.GetItemInfoInstant
+        C_Item.GetItemInfoInstant = nil; A.Operations:AttachMail(); eq(next(M.attachments), nil)
+        C_Item.GetItemInfoInstant, cloth.class = query, 7
+        A.Operations:AttachMail(); M.tick(2)
+        eq(SendMailNameEditBox:GetText(), "Tailor"); eq(M.attachments[1], cloth)
+    end)
+
+    test("Mail tab saves realm-qualified routes, supports keyboard edits and lists logged-in alts", function()
+        M.playerName, M.realm = "Tailor", "OtherRealm"
+        event("PLAYER_LOGIN"); M.realm, M.playerName = "Realm", "Blacksmith"; event("PLAYER_LOGIN")
+        A.Settings:Toggle(); A.Settings.tabs.Mail:Fire("OnClick")
+        eq(A.Settings.modeFooter:IsShown(), false); eq(A.Settings.checks.autoAttachMail:IsVisible(), true)
+        local cloth = field("cloth")
+        cloth.choose:Fire("OnClick"); eq(M.menu.choices[2].text, "Tailor")
+        M.menu.choices[2].callback(); eq(A.db.mailRoutes.cloth, "Tailor-OtherRealm")
+        local metal = field("metal")
+        metal:SetFocus(); metal:SetText(" Smith "); A.Settings:Refresh(); eq(metal:GetText(), " Smith ")
+        metal:Fire("OnTabPressed"); eq(field("herbs"):HasFocus(), true); eq(A.db.mailRoutes.metal, "Smith-Realm")
+        field("herbs"):SetText("Partial"); field("herbs"):Fire("OnEscapePressed"); eq(A.db.mailRoutes.herbs, nil)
+        field("bank"):SetFocus(); field("bank"):SetText("Bank")
+        A.Settings:SelectTab("General"); eq(A.Settings:EditingRecipient(), nil)
+        eq(A.Settings.checks.autoAttachMail:IsVisible(), false); eq(A.db.mailRoutes.bank, "Bank-Realm")
+        A.Store:Initialize(); eq(A.db.mailRoutes.cloth, "Tailor-OtherRealm"); eq(A.db.knownCharacters["Tailor-OtherRealm"], true)
+        M.realm = "OtherRealm"; M.playerName = "Tailor"; local linen = stack(1, 2589, 7, 5)
+        openDraft(); eq(M.bags[0][1], linen); eq(next(M.attachments), nil)
+        A.Store:ResetSettings(); eq(next(A.db.mailRoutes), nil); eq(A.Store:Get(linen.guid), "mail")
+    end)
+
+    test("untranslated mage scrolls use the friend's rule while power-up scrolls use the fallback", function()
+        A.Settings:Toggle(); A.Settings:SelectTab("Mail")
+        local mage = field("mageScrolls")
+        mage:SetFocus(); mage:SetText("Mage Friend"); mage:Fire("OnEnterPressed")
+        A.Store:SetMailRoute("bank", "Bank")
+        for _, id in ipairs({ 211780, 211784, 211785, 211786, 211787, 211853, 211854, 211855,
+            213543, 213544, 213545, 213546, 213547, 281015, 281016, 281017, 281018 }) do
+            eq(A.MailRoutes:Resolve(id), "Mage Friend-Realm")
+        end
+        local mageScroll = stack(1, 281018, 0, 4)
+        local powerUp = stack(2, 955, 0, 4)
+        local unmarked = M.item("Item-KeepScroll", 0, 3, { itemID = 211784 })
+        openDraft(); eq(SendMailNameEditBox:GetText(), "Mage Friend")
+        eq(M.attachments[1], mageScroll); eq(M.attachments[2], nil)
+        clickSend(); success(); eq(SendMailNameEditBox:GetText(), "Bank")
+        eq(M.attachments[1], powerUp); eq(M.bags[0][3], unmarked)
+        A.Store:SetMailRoute("mageScrolls", ""); eq(A.MailRoutes:Resolve(281018), "Bank-Realm")
+    end)
+
+    test("cooking batches ingredients and recipes, preserves the herb route and leaves prepared meals for the bank", function()
+        A.Store:SetMailRoute("cooking", "Camp Cook"); A.Store:SetMailRoute("herbs", "Herbalist")
+        A.Store:SetMailRoute("bank", "Bank")
+        local meat = stack(1, 2672, 7, 8)
+        local spices = stack(2, 2678, 7, 11)
+        local squid = stack(3, 13755, 0, 5)
+        local learn = stack(4, 6325, 9, 5)
+        local herb = stack(5, 2447, 7, 9)
+        local meal = stack(6, 6290, 0, 5)
+        local locked = stack(7, 6291, 7, 8, "locked")
+        local unmarked = M.item("Item-UnmarkedRecipe", 0, 8, { itemID = 6325, class = 9, subclass = 5 })
+        openDraft(); eq(SendMailNameEditBox:GetText(), "Camp Cook"); eq(#M.attachments, 4)
+        eq(M.attachments[1], meat); eq(M.attachments[2], spices); eq(M.attachments[3], squid); eq(M.attachments[4], learn)
+        clickSend(); success(); eq(SendMailNameEditBox:GetText(), "Herbalist"); eq(M.attachments[1], herb)
+        clickSend(); success(); eq(SendMailNameEditBox:GetText(), "Bank"); eq(M.attachments[1], meal)
+        eq(M.bags[0][7], locked); eq(M.bags[0][8], unmarked)
+    end)
+
+    test("recipe overrides, recipe default, related material and sender fallback apply in order", function()
+        local pattern = stack(1, 2598, 9, 2)
+        A.Store:SetRecipient("Bank"); eq(A.MailRoutes:Resolve(pattern.itemID), "Bank")
+        A.Store:SetMailRoute("cloth", "Landmine Tailor")
+        eq(A.MailRoutes:Tooltip(pattern.itemID), "Mail to Landmine Tailor (Cloth)")
+        A.Store:SetMailRoute("recipes", "Recipe Collector")
+        eq(A.MailRoutes:Resolve(pattern.itemID), "Recipe Collector-Realm")
+        eq(A.MailRoutes:Tooltip(pattern.itemID), "Mail to Recipe Collector (Recipe default)")
+        A.Store:SetMailRoute("recipeTailoring", "Pattern Friend")
+        eq(A.MailRoutes:Resolve(pattern.itemID), "Pattern Friend-Realm")
+        eq(A.MailRoutes:Tooltip(pattern.itemID), "Mail to Pattern Friend (Tailoring recipes)")
+        A.Store:SetMailRoute(pattern.itemID, "Exact Friend"); eq(A.MailRoutes:Resolve(pattern.itemID), "Exact Friend-Realm")
+        A.Store:SetMailRoute(pattern.itemID, ""); A.Store:SetMailRoute("recipeTailoring", "Sender")
+        eq(A.MailRoutes:Tooltip(pattern.itemID), "Mail (Keep on this character)")
+        A.Store:SetMailRoute("mageScrolls", "Mage")
+        stack(2, 955, 0, 4); stack(3, 211780, 0, 4); stack(4, 21279, 9, 0)
+        eq(A.MailRoutes:Resolve(955), "Bank"); eq(A.MailRoutes:Resolve(211780), "Mage-Realm")
+        eq(A.MailRoutes:Resolve(21279), "Bank")
+    end)
+
+    test("each profession recognizes its own teaching items including misfiled plans and gathering blueprints", function()
+        local examples = {
+            { "Alchemy", 2553, 6 }, { "Blacksmithing", 2881, 4 }, { "Cooking", 6325, 5 },
+            { "Enchanting", 6342, 8 }, { "Engineering", 4408, 3 }, { "FirstAid", 6454, 7 },
+            { "Fishing", 273119, 9 }, { "Herbalism", 273106, 0 }, { "Leatherworking", 2406, 1 },
+            { "Mining", 273097, 0 }, { "Skinning", 273109, 0 }, { "Tailoring", 2598, 2 },
+            { "Blacksmithing", 275598, 1 }, { "Leatherworking", 275586, 2 },
+        }
+        for i, example in ipairs(examples) do
+            local profession, id, subclass = unpack(example)
+            A.Store:SetMailRoute("recipe" .. profession, profession)
+            M.item("Item-Profession" .. i, 0, i, { itemID = id, class = 9, subclass = subclass })
+        end
+        A.Store:Initialize()
+        for _, example in ipairs(examples) do eq(A.MailRoutes:Resolve(example[2]), example[1] .. "-Realm") end
+        A.Store:SetMailRoute("bank", "Bank")
+        M.info[4408].subclass = M.secret
+        eq(A.MailRoutes:Tooltip(4408), "Mail (Item category unknown)")
+    end)
+
+    test("recipe settings preview inherited recipients and keep keyboard edits within their page", function()
+        A.Settings:Toggle(); A.Settings:SelectTab("Mail")
+        local cooking = field("cooking")
+        cooking:SetFocus(); cooking:SetText("Camp Cook")
+        A.Settings.recipeButton:Fire("OnClick")
+        eq(A.db.mailRoutes.cooking, "Camp Cook-Realm")
+        local cookRecipe, default = field("recipeCooking"), field("recipes")
+        eq(cooking:IsVisible(), false); eq(cookRecipe:IsVisible(), true)
+        eq(cookRecipe.Instructions:GetText(), "Use Camp Cook")
+        default:SetFocus(); default:SetText("Archivist"); default:Fire("OnEnterPressed")
+        eq(cookRecipe.Instructions:GetText(), "Use Archivist")
+        field("recipeTailoring"):SetFocus(); field("recipeTailoring"):Fire("OnTabPressed")
+        eq(default:HasFocus(), true)
+        cookRecipe:SetFocus(); cookRecipe:SetText("Recipe Friend"); A.Settings:Refresh()
+        eq(cookRecipe:GetText(), "Recipe Friend")
+        A.Settings.recipeBack:Fire("OnClick"); eq(cookRecipe:HasFocus(), false)
+        eq(cooking:IsVisible(), true); eq(A.db.mailRoutes.recipeCooking, "Recipe Friend-Realm")
+        A.Store:Initialize(); eq(A.db.mailRoutes.recipes, "Archivist-Realm")
+        eq(A.db.mailRoutes.recipeCooking, "Recipe Friend-Realm"); eq(A.db.mailRoutes.cooking, "Camp Cook-Realm")
+        local recipe = stack(1, 6325, 9, 5)
+        local fish = stack(2, 6291, 7, 8)
+        local plans = stack(3, 2881, 9, 4)
+        openDraft(); eq(SendMailNameEditBox:GetText(), "Recipe Friend"); eq(#M.attachments, 1); eq(M.attachments[1], recipe)
+        clickSend(); success(); eq(SendMailNameEditBox:GetText(), "Camp Cook"); eq(#M.attachments, 1); eq(M.attachments[1], fish)
+        clickSend(); success(); eq(SendMailNameEditBox:GetText(), "Archivist"); eq(#M.attachments, 1); eq(M.attachments[1], plans)
+        A.Store:ResetSettings(); eq(next(A.db.mailRoutes), nil)
+    end)
+
+    test("item menu creates an exact recipient and removing it restores the category", function()
+        local scroll = stack(1, 211780, 0, 4)
+        local other = stack(2, 281017, 0, 4)
+        A.Store:SetMailRoute("mageScrolls", "Local Mage")
+        A.UI:ItemMenu(M.button(0, 1), A.API:Read(0, 1))
+        eq(M.menu.children[1].text, "Mail recipient for this item...")
+        M.menu.children[1].callback()
+        local settings = A.Settings
+        eq(settings.ruleItem:GetText(), "211780"); eq(settings.ruleRecipient:HasFocus(), true)
+        settings.ruleRecipient:SetText("Friend-OtherRealm"); settings.ruleSave:Fire("OnClick")
+        A.Store:Initialize()
+        eq(A.MailRoutes:Tooltip(scroll.itemID), "Mail to Friend (Item rule)")
+        openDraft(); eq(SendMailNameEditBox:GetText(), "Friend")
+        eq(M.attachments[1], scroll); eq(M.attachments[2], nil); eq(M.bags[0][2], other)
+        settings:OpenItemRoutes()
+        eq(settings.selectedTab, "Item rules")
+        local row = settings.ruleRows[1]
+        eq(row.itemID, 211780); eq(row.address:GetText(), "Friend")
+        row:Fire("OnClick"); eq(settings.ruleItem:GetText(), "211780")
+        settings.ruleRecipient:SetText(" | "); settings.ruleSave:Fire("OnClick")
+        eq(A.db.itemRecipients[211780], "Friend-OtherRealm")
+        settings.ruleRemove:Fire("OnClick"); eq(A.MailRoutes:Resolve(scroll.itemID), "Local Mage-Realm")
+    end)
+
+    test("an item link can route mail without a category or bank alt", function()
+        local item = stack(1, 17056, 15, 0)
+        local settings = A.Settings
+        settings:OpenItemRoutes()
+        settings.addRule:Fire("OnClick")
+        settings.ruleItem:SetText("0"); settings.ruleRecipient:SetText("Friend")
+        settings.ruleSave:Fire("OnClick"); eq(next(A.db.itemRecipients), nil)
+        settings.ruleItem:SetText(item.link); settings.ruleRecipient:SetText("Friend")
+        settings.ruleRecipient:Fire("OnEnterPressed")
+        eq(A.db.itemRecipients[17056], "Friend-Realm")
+        openDraft(); eq(M.attachments[1], item); eq(SendMailNameEditBox:GetText(), "Friend")
+        A.Store:ResetSettings(); eq(next(A.db.itemRecipients), nil)
+    end)
+
+    test("recipient names stay short across edits, reloads, tooltips and drafts", function()
+        M.realm = "CAMWOWUS1Realm9RPPvP"
+        local address = "Landmine Il-" .. M.realm
+        A.Settings:Toggle(); A.Settings:SelectTab("Mail")
+        local cloth = field("cloth")
+        assert(A.Settings.frame:GetWidth() >= 540 and cloth:GetWidth() >= 260)
+        cloth:SetFocus(); cloth:SetText("Landmine Il"); cloth:Fire("OnEnterPressed")
+        eq(A.db.mailRoutes.cloth, address); eq(cloth:GetText(), "Landmine Il")
+        A.Store:Initialize(); A.Settings:Refresh(); eq(cloth:GetText(), "Landmine Il")
+        local item = stack(1, 2589, 7, 5)
+        eq(A.MailRoutes:Tooltip(item.itemID), "Mail to Landmine Il (Cloth)")
+        A.db.knownCharacters[address] = true; A.db.knownCharacters["Landmine Il-OtherRealm"] = true
+        cloth.choose:Fire("OnClick")
+        eq(#M.menu.choices, 1); eq(M.menu.choices[1].text, "Landmine Il")
+        eq(M.menu.choices[1].selected(), true)
+        openDraft(); eq(SendMailNameEditBox:GetText(), "Landmine Il"); eq(M.attachments[1], item)
+        M.realm = "OtherRealm"; A.Settings:Refresh(); eq(cloth:GetText(), "Landmine Il")
+        cloth.choose:Fire("OnClick"); M.menu.choices[1].callback(); eq(A.db.mailRoutes.cloth, address)
+    end)
+
+    test("future and malformed route saves cannot modify mail destinations or the remembered roster", function()
+        BagMarksDB = { schema = 4, mailRoutes = { cloth = 3, herbs = " Herb-Realm| ", extra = "Drop" },
+            itemRecipients = { [211780] = " Friend-Realm| ", [-1] = "Bad", [15] = {} },
+            knownCharacters = { [5] = true, ["Name-Realm"] = true, ["Bad"] = {} } }
+        A.Store:Initialize(); eq(A.db.mailRoutes.herbs, "Herb-Realm"); eq(A.db.mailRoutes.cloth, nil)
+        eq(A.db.mailRoutes.extra, nil); eq(A.db.knownCharacters[5], nil); eq(A.db.knownCharacters["Name-Realm"], true)
+        eq(A.db.itemRecipients[211780], "Friend-Realm"); eq(A.db.itemRecipients[-1], nil); eq(A.db.itemRecipients[15], nil)
+        local future = { schema = A.schema + 1, mailRoutes = { cloth = "Keep" }, itemRecipients = { [211780] = "Saved" } }
+        BagMarksDB = future; A.Store:Initialize(); event("PLAYER_LOGIN")
+        A.Store:SetMailRoute("cloth", "Replace"); A.Store:SetMailRoute(211780, "Replace"); A.Store:ResetSettings()
+        eq(future.itemRecipients[211780], "Saved")
+        eq(BagMarksDB, future); eq(future.mailRoutes.cloth, "Keep"); eq(future.knownCharacters, nil)
+    end)
+
+    test("the rule list edits personal marks and shared destinations independently of existing copies", function()
+        local s = A.Settings
+        A.SetOption("rememberItemTypes", true)
+        local old = M.item("Item-ExistingFeather", 0, 1, { itemID = 17056, name = "Light Feather" })
+        s:OpenItemRoutes(); s.ruleSearch:SetText("")
+        eq(s.ruleEmpty:IsVisible(), true); s.addRule:Fire("OnClick")
+        s.ruleItem:SetText(old.link); s.ruleMark:Fire("OnClick"); M.menu.choices[2].callback()
+        s.ruleRecipient:SetText("Landmine Tailor"); s.ruleSave:Fire("OnClick")
+        eq(A.Store:Get(old.guid), nil); eq(A.char.itemRules[17056], "mail")
+        eq(A.db.itemRecipients[17056], "Landmine Tailor-Realm")
+        local row = s.ruleRows[1]
+        eq(row.item:GetText(), "Light Feather"); eq(row.mark:GetText(), "Mail")
+        eq(row.address:GetText(), "Landmine Tailor"); eq(row.id:GetText(), "ID 17056")
+        local nextCopy = M.item("Item-NewFeather", 0, 2, { itemID = 17056, name = "Light Feather" })
+        event("BAG_UPDATE_DELAYED"); M.tick(0); eq(A.Store:Get(nextCopy.guid), "mail")
+        row:Fire("OnClick"); s.ruleMark:Fire("OnClick"); M.menu.choices[3].callback()
+        s.ruleRecipient:SetText(""); s.ruleSave:Fire("OnClick")
+        eq(A.char.itemRules[17056], "junk"); eq(A.db.itemRecipients[17056], nil)
+        eq(row.address:GetText(), "No recipient set"); eq(row.source:GetText(), ""); eq(A.Store:Get(nextCopy.guid), "mail")
+        s.ruleSearch:SetText("JUNK"); eq(row.itemID, 17056)
+        row:Fire("OnClick"); s.ruleRemove:Fire("OnClick")
+        eq(A.char.itemRules[17056], nil); eq(s.ruleEmpty:IsVisible(), true)
+        eq(A.Store:Get(nextCopy.guid), "mail")
+    end)
+
+    test("rules show paused marks and the current destination from the mail resolver", function()
+        local s, id = A.Settings, 2589
+        local cloth = M.item("Item-RoutingPreview", 0, 1, { itemID = id, name = "Linen Cloth", class = 7, subclass = 5 })
+        A.Store:SetTypeRule(id, "mail"); s:OpenItemRoutes()
+        local row = s.ruleRows[1]
+        local function destination(name, source)
+            M.tick(0)
+            eq(row.itemID, id); eq(row.address:GetText(), name)
+            eq(row.source:GetText(), source and ("(" .. source .. ")") or "")
+        end
+        assert(s.pageDetail:GetText():find("Automatic marks are paused.", 1, true))
+        assert(s.pageDetail:GetText():find("items you mark for mail", 1, true))
+        destination("No recipient set")
+        A.Store:SetMailRoute("bank", "Oak"); destination("Oak", "Account default")
+        A.Store:SetRecipient("Ash"); destination("Ash", "Character override")
+        A.Store:SetMailRoute("cloth", "Tailor"); destination("Tailor", "Cloth")
+        s.recipientFilter:Fire("OnClick")
+        eq(M.menu.choices[4].text, "Tailor"); M.menu.choices[4].callback()
+        s.ruleSearch:SetText("tailor"); destination("Tailor", "Cloth")
+        A.Store:SetMailRoute(id, "Mage"); M.tick(0); eq(s.ruleEmpty:IsVisible(), true)
+        s.clearRuleFilters:Fire("OnClick"); destination("Mage", "Item rule")
+        A.Store:SetMailRoute(id, "Sender"); destination("Keep on this character")
+        A.Store:SetMailRoute(id, ""); cloth.missingClass = true; destination("Item category unknown")
+        cloth.missingClass = false; event("ITEM_DATA_LOAD_RESULT", id, true); destination("Tailor", "Cloth")
+        A.SetOption("rememberItemTypes", true)
+        assert(not s.pageDetail:GetText():find("paused", 1, true)); eq(row.mark:GetText(), "Mail")
+        s:SelectTab("General"); A.SetOption("rememberItemTypes", false); s:SelectTab("Item rules")
+        assert(s.pageDetail:GetText():find("Turn them on in General.", 1, true))
+    end)
+
+    test("item rules search, page, and replace uncached IDs without resetting the edit in progress", function()
+        local s = A.Settings
+        for i = 1, 16 do
+            local name = ("Reagent %02d"):format(i)
+            M.item("Item-RuleList" .. i, 0, i, { itemID = 4000 + i, name = name })
+            A.Store:SetMailRoute(4000 + i, i == 10 and "Mage Friend" or "Bank Alt")
+        end
+        s:OpenItemRoutes(); s.ruleSearch:SetText("")
+        eq(s.ruleCount:GetText(), "1 to 7 of 16")
+        s.nextRules:Fire("OnClick"); eq(s.ruleRows[1].itemID, 4008)
+        s.nextRules:Fire("OnClick"); eq(s.ruleRows[1].itemID, 4015); eq(s.nextRules:IsEnabled(), false)
+        s.prevRules:Fire("OnClick"); eq(s.rulePage, 2)
+        for _, query in ipairs({ "Mage Friend", "4010", "reagent 10" }) do
+            s.ruleSearch:SetText(query); eq(s.ruleRows[1].itemID, 4010); eq(s.ruleRows[2]:IsVisible(), false)
+        end
+        M.info[4010].uncached = true; s.ruleSearch:SetText("4010")
+        eq(s.ruleRows[1].item:GetText(), "Item 4010"); eq(M.requestedItems[4010], 1)
+        s.ruleRows[1]:Fire("OnClick"); s.ruleRecipient:SetText("Unsaved Edit")
+        M.info[4010].uncached = nil
+        A.eventFrame:Fire("OnEvent", "ITEM_DATA_LOAD_RESULT", 4010, true); M.tick(0)
+        eq(s.ruleName:GetText(), "Reagent 10", "editor title"); eq(s.ruleRows[1].item:GetText(), "Reagent 10", "list row")
+        eq(s.ruleRecipient:GetText(), "Unsaved Edit")
+        s:SelectTab("Mail"); eq(s.ruleFrame:IsShown(), false); eq(s.ruleRecipient:HasFocus(), false)
+        eq(A.db.itemRecipients[4010], "Mage Friend-Realm")
+    end)
+
+    test("rule filters combine with search and stay active as matching rules change", function()
+        local s = A.Settings
+        local function choose(button, label)
+            button:Fire("OnClick")
+            for _, choice in ipairs(M.menu.choices) do
+                if choice.text == label then choice.callback(); return end
+            end
+            error("Missing menu choice " .. label)
+        end
+        for i = 1, 10 do
+            local id = 4000 + i
+            M.item("Item-Filter" .. i, 0, i, { itemID = id, name = ("Reagent %02d"):format(i) })
+            if i <= 8 then A.Store:SetTypeRule(id, "mail") end
+            if i == 9 then A.Store:SetTypeRule(id, "junk") end
+            if i >= 8 then A.Store:SetMailRoute(id, "Bank Alt") end
+        end
+        s:OpenItemRoutes()
+        s.nextRules:Fire("OnClick"); eq(s.rulePage, 2)
+        choose(s.markFilter, "Mail"); eq(s.rulePage, 1); eq(s.ruleCount:GetText(), "1 to 7 of 8")
+        s.nextRules:Fire("OnClick"); eq(s.ruleRows[1].itemID, 4008)
+        choose(s.recipientFilter, "Item-specific recipient")
+        eq(s.ruleCount:GetText(), "1 to 1 of 1"); eq(s.ruleRows[1].itemID, 4008)
+        s.ruleSearch:SetText("BANK ALT")
+        s.ruleRows[1]:Fire("OnClick"); choose(s.ruleMark, "Junk"); s.ruleSave:Fire("OnClick")
+        eq(s.ruleEmpty:IsVisible(), true); assert(s.ruleEmpty:GetText():find("No rules match", 1, true))
+        eq(s.ruleSearch:GetText(), "BANK ALT"); eq(s.markFilter:GetText(), "Mail")
+        eq(A.char.itemRules[4008], "junk"); eq(A.db.itemRecipients[4008], "Bank Alt-Realm")
+        s:SelectTab("Mail"); s:SelectTab("Item rules")
+        choose(s.markFilter, "Junk"); eq(s.ruleCount:GetText(), "1 to 2 of 2")
+        choose(s.markFilter, "No automatic mark"); eq(s.ruleRows[1].itemID, 4010)
+        s.clearRuleFilters:Fire("OnClick"); eq(s.ruleCount:GetText(), "1 to 7 of 10")
+        eq(s.ruleSearch:GetText(), ""); eq(s.clearRuleFilters:IsEnabled(), false)
+        choose(s.recipientFilter, "Use mail settings"); eq(s.ruleCount:GetText(), "1 to 7 of 7")
+        eq(s.ruleRows[7].itemID, 4007); eq(s.nextRules:IsVisible(), false)
+        A.Store:SetMailRoute(4007, "Mage Friend"); M.tick(0)
+        eq(s.ruleCount:GetText(), "1 to 6 of 6"); eq(s.ruleRows[7]:IsVisible(), false)
+        A.Store:SetMailRoute(4006, "Mage Friend-OtherRealm")
+        choose(s.recipientFilter, "Mage Friend")
+        eq(#M.menu.choices, 5); eq(s.ruleCount:GetText(), "1 to 2 of 2")
+        s.ruleSearch:SetText("06"); eq(s.ruleRows[1].itemID, 4006); eq(s.ruleRows[2]:IsVisible(), false)
+    end)
+end

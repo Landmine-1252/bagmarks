@@ -2,9 +2,9 @@
 -- Modules share state through A; Blizzard's named entry points use globals.
 local addonName, A = ...
 A.name = addonName
-A.version = "1.0.5"
+A.version = "1.1.0"
 -- SavedVariables format version, independent of the addon release number.
-A.schema = 4
+A.schema = 8
 A.states = { locked = "Locked", junk = "Junk", mail = "Mail" }
 -- Store.lua fills missing/invalid options from these values and keeps valid
 -- saved choices, including shortcuts selected before a default changed.
@@ -31,8 +31,8 @@ function A.Print(message)
     end
 end
 
--- Native protection uses IsEnabled even in combat. Marking and queued item
--- actions use CanAct, which adds the combat restriction.
+-- Native protection and explicit mouse marks can run in combat. CanAct adds
+-- the combat restriction for helpers, marking mode and keyboard shortcuts.
 function A.IsEnabled()
     return A.db and A.db.enabled and not A.readOnly and A.API.available
 end
@@ -71,6 +71,9 @@ function A.SetOption(key, value)
     if key == "enabled" and not value then
         A.mode = false
         A.Operations:Cancel()
+        local settling = A.Mail.settling
+        A.Mail:Close()
+        if settling and SendMailFrame and SendMailFrame:IsVisible() and SendMailFrame_CanSend then SendMailFrame_CanSend() end
     end
     if key == "autoSellJunk" and not value then A.Operations:CancelAutomatic("junk") end
     if key == "autoAttachMail" and not value then A.Operations:CancelAutomatic("mail") end

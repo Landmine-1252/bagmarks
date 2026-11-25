@@ -16,19 +16,22 @@ end
 
 function API:Read(bag, slot, allowCombat)
     -- Passive icons and explicit marking gestures need a live identity in combat.
+    -- The second result flags unreadable data so a scan can distinguish it from an empty slot.
     if not self.available or (A.InCombat() and not allowCombat) or not A.Safe(bag) or not A.Safe(slot)
-        or type(bag) ~= "number" or type(slot) ~= "number" then return end
+        or type(bag) ~= "number" or type(slot) ~= "number" then return nil, true end
     local ok, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
-    if not ok or not A.Safe(info) or type(info) ~= "table" then return end
+    if not ok or not A.Safe(info) then return nil, true end
+    if info == nil then return end -- The client reports an empty slot.
+    if type(info) ~= "table" then return nil, true end
     for _, key in ipairs({ "itemID", "stackCount", "isLocked", "isBound", "hasNoValue", "hyperlink", "quality" }) do
-        if not A.Safe(info[key]) then return end
+        if not A.Safe(info[key]) then return nil, true end
     end
-    if type(info.itemID) ~= "number" or type(info.stackCount) ~= "number" or info.stackCount < 1 then return end
+    if type(info.itemID) ~= "number" or type(info.stackCount) ~= "number" or info.stackCount < 1 then return nil, true end
     local location = self:Location(bag, slot)
     -- An item ID identifies a type shared by many copies. Only a GUID can
     -- carry one selected copy's mark safely through sorting and movement.
     local guidOK, guid = pcall(C_Item.GetItemGUID, location)
-    if not guidOK or not A.Safe(guid) or type(guid) ~= "string" or not guid:match("^Item%-") then return end
+    if not guidOK or not A.Safe(guid) or type(guid) ~= "string" or not guid:match("^Item%-") then return nil, true end
     -- Treat an unknown native busy flag as busy, so helpers do not act on it.
     return {
         guid = guid, bag = bag, slot = slot, location = location,
@@ -64,16 +67,19 @@ function API:BagIDs(includeBank)
 end
 
 function API:Scan(includeBank, forMark)
-    -- Return both the found GUIDs and the bags we could inspect. Store uses
-    -- scope to distinguish a missing item from a bank that is merely closed.
+    -- Only a complete bag can confirm that an unseen GUID has left. Keep
+    -- readable items from a partially loaded bag available to callers.
     local items, scope = {}, {}
     if not self.available or (A.InCombat() and not forMark) then return items, scope end
     for _, bag in ipairs(self:BagIDs(includeBank)) do
         local ok, count = pcall(C_Container.GetContainerNumSlots, bag)
-        if ok and A.Safe(count) and type(count) == "number" then
+        if not ok or not A.Safe(count) or type(count) ~= "number" or count < 0 then
+            scope[bag] = false
+        elseif count > 0 then
             scope[bag] = true
             for slot = 1, count do
-                local item = self:Read(bag, slot, forMark)
+                local item, unreadable = self:Read(bag, slot, forMark)
+                if unreadable then scope[bag] = false end
                 if item then items[item.guid] = item end
             end
         end
@@ -121,7 +127,7 @@ function API:IsQuest(item)
     local ok, info = pcall(C_Container.GetContainerItemQuestInfo, item.bag, item.slot)
     if not ok or not A.Safe(info) or type(info) ~= "table" then return true end
     if not A.Safe(info.isQuestItem) or not A.Safe(info.questID) then return true end
-    return info.isQuestItem or info.questID ~= nil
+    return info.isQuestItem ~= false or info.questID ~= nil
 end
 
 function API:Refundable(item)

@@ -17,6 +17,8 @@ For a new version, update `## Version` in `BagMarks.toc` and `A.version` in `Cor
 
 Mail routing regressions exercise the Comprehension scroll IDs, ordinary power-up scrolls, exact item exceptions, short display names after character switches and the stored addresses used for attachment checks. Combat cases exercise the configured mouse shortcut, foreground slots, pooled buttons, typing focus and merged stack selection.
 
+The 1.1.1 regressions interrupt bag scans and change the cursor, attachment slot, or recipient during pickup. They also cover editing a disenchanter while opening the mailbox, combining routes for one regional character, preserving a subject edited during a send, and handling a refused sale. The archive tests remove individual theme textures to check that an incomplete ZIP fails validation.
+
 For 1.0.9, an offline check ran the mail resolver against the item classes and teaching relationships in Forever build 1.60.1.70959. It matched 1,715 recipe-teaching items across twelve professions and 107 distinct ingredients used by meal and drink recipes. The Lua suite also checks which stacks enter each draft when a profession override, a recipe default, a related material recipient or a bank alt is configured. [Forever professions](https://sktools.gg/forever/professions) [Client item data](https://wago.tools/db2/Item?build=1.60.1.70959)
 
 Version 1.0.5 passed **304 Lua 5.1 mock tests** and **67 Python tests**. A two-character case follows the same Linen Cloth stack from the blacksmith's outgoing mail into the tailor's bags. Each character opens a draft with an independent recipient and item selection. Migration cases cover claiming an old shared address, clearing or resetting one sender's address and preserving newer saves.

@@ -118,7 +118,7 @@ local function repaintAfterSend(request, sent)
     elseif not Mail.subjectEdited and sent.generatedSubject == fieldText(SendMailSubjectEditBox) then
         SendMailFrame.previousItem = sent.generatedSubject
     end
-    local subject = Mail.subjectEdited and fieldText(SendMailSubjectEditBox)
+    local subject = Mail.subjectEdited and (sent.editedSubject or fieldText(SendMailSubjectEditBox))
     if Mail.subjectEdited then SendMailFrame.previousItem = nil end
     if SendMailFrame_Update then SendMailFrame_Update() end
     if subject and subject ~= fieldText(SendMailSubjectEditBox) then
@@ -136,7 +136,7 @@ function Mail:SendPending()
 end
 
 function Mail:PlanDraft()
-    if self:SendPending() or A.Settings:EditingRecipient() or self.reply or SendMailFrame.sendMode == "reply" then return end
+    if self:SendPending() or A.Settings:EditingMailRoute() or self.reply or SendMailFrame.sendMode == "reply" then return end
     if not next(A.db.mailRoutes) and not next(A.db.itemRecipients) and A.char.recipient == "" then return end
     local edit = SendMailNameEditBox
     local current = fieldText(edit)
@@ -205,8 +205,8 @@ function Mail:QueueDraftUpdate(opening)
     if not A.mailOpen or not SendMailFrame or not SendMailFrame:IsVisible() then return end
     local request = self.pending or {}
     if opening and A.CanAct() and A.db.autoAttachMail then request.attach = true end
-    if self.pending and not request.waitingForSender and not request.waitingForSlots then return end
-    request.waitingForSender, request.waitingForSlots = nil, nil
+    if self.pending and not (request.waitingForSender or request.waitingForSlots or request.waitingForEditor) then return end
+    request.waitingForSender, request.waitingForSlots, request.waitingForEditor = nil, nil, nil
     self.pending = request
     local function update()
         if self.pending ~= request then return end
@@ -234,6 +234,12 @@ function Mail:QueueDraftUpdate(opening)
         if self.reply then return end
         fillSubject()
         if self.manualDraft then return end
+        if A.Settings:EditingMailRoute() then
+            -- A focus change or closing the rule editor will wake this same draft.
+            request.waitingForEditor = true
+            self.pending = request
+            return
+        end
         if (request.attach or (A.db.autoFillRecipient and not self.recipientHandled))
             and (A.char.recipient ~= "" or next(A.db.mailRoutes) or next(A.db.itemRecipients))
             and not A.MailRoutes:PlayerAddress() then
@@ -245,7 +251,7 @@ function Mail:QueueDraftUpdate(opening)
         end
         if request.attach and not self.attachAttempted and A.db.autoAttachMail then
             A.Operations:AttachMail(true)
-        elseif not self.recipientHandled and A.db.autoFillRecipient and not A.Settings:EditingRecipient() then
+        elseif not self.recipientHandled and A.db.autoFillRecipient then
             self:PlanDraft()
         end
     end
@@ -277,6 +283,7 @@ function Mail:Sent()
     if not sent and A.API:ComposeOpen() then sent = { slots = {}, byGUID = {} } end
     if sent then
         if sent.edited then continue = false end
+        self.subjectEdited = sent.editedSubject ~= nil
         self.sentGUIDs = self.sentGUIDs or {}
         for _, item in pairs(sent.slots) do
             if item.guid then self.sentGUIDs[item.guid] = true end
@@ -316,6 +323,7 @@ function Mail:InstallHooks()
     local function draftEdited()
         local sent = self.settling or self.submission
         if sent then sent.edited = true end
+        return sent
     end
     if SendMailMailButton then
         SendMailMailButton:HookScript("PreClick", function()
@@ -377,8 +385,12 @@ function Mail:InstallHooks()
             stopAttaching()
         end
     end)
-    SendMailSubjectEditBox:HookScript("OnTextChanged", function(_, userInput)
-        if userInput then draftEdited(); self.subjectEdited, self.provisionalSubject = true, nil end
+    SendMailSubjectEditBox:HookScript("OnTextChanged", function(edit, userInput)
+        if userInput then
+            local sent = draftEdited()
+            if sent then sent.editedSubject = fieldText(edit) end
+            self.subjectEdited, self.provisionalSubject = true, nil
+        end
     end)
     if SendMailBodyEditBox then
         SendMailBodyEditBox:HookScript("OnTextChanged", function(_, userInput) if userInput then draftEdited() end end)

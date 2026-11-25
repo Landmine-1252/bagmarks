@@ -16,8 +16,12 @@ end
 function Ops:Eligible(item, state)
     -- A mark alone is insufficient: busy, changed, quest, refundable, and
     -- otherwise ineligible items must also stay out of every automated path.
-    if not A.Store:Eligible(item, state) or A.API:IsQuest(item) or A.API:Refundable(item) then return false end
-    if state == "junk" then return A.API:BagAllowsJunkSale(item.bag) and A.API:SellPrice(item) ~= nil end
+    if not A.Store:Eligible(item, state) then return false end
+    if state == "junk" then
+        if not A.API:BagAllowsJunkSale(item.bag) or A.API:IsQuest(item) or A.API:Refundable(item) then return false end
+        local price = A.API:SellPrice(item)
+        return price ~= nil, price
+    end
     return A.IsMailMark(state) and A.API:CanMail(item)
 end
 
@@ -29,8 +33,9 @@ function Ops:CollectJunk(limit)
     local preview, skipped, total = {}, 0, 0
     for _, item in ipairs(ordered(items)) do
         if A.Store:Get(item.guid) == "junk" then
-            if (not limit or #preview < limit) and self:Eligible(item, "junk") then
-                local price = A.API:SellPrice(item)
+            local eligible, price
+            if not limit or #preview < limit then eligible, price = self:Eligible(item, "junk") end
+            if eligible then
                 preview[#preview + 1] = { guid = item.guid, count = item.count, itemID = item.itemID,
                     state = "junk", link = item.link, price = price }
                 total = total + price * item.count
@@ -109,6 +114,10 @@ end
 
 function Ops:AttachMail(automatic)
     if A.Mail:SendPending() then return end
+    if A.Settings:EditingMailRoute() then
+        if not automatic then A.Print("Finish editing the recipient before attaching marked items.") end
+        return
+    end
     A.Mail.attachAttempted = true
     if not A.API:MailReady() then
         if not automatic then A.Print("Open Send Mail with an empty cursor, outside combat.") end
@@ -157,12 +166,38 @@ function Ops:Finish()
     end
 end
 
+local function draftMatches(job)
+    return not A.Mail:SendPending() and not A.Mail.reply and SendMailFrame.sendMode ~= "reply"
+        and A.Mail:AddressMatches(job.recipient) and (not job.automatic or A.db.autoAttachMail)
+end
+
+local function routeMatches(entry, recipient)
+    return A.MailRoutes:SameRecipient(A.MailRoutes:Resolve(entry.itemID, entry.state), recipient)
+end
+
 local function jobReady(job)
     if job.kind == "mail" then
-        return A.API:MailReady() and A.Mail:AddressMatches(job.recipient)
-            and (not job.automatic or (A.db.autoAttachMail and SendMailFrame.sendMode ~= "reply"))
+        return A.API:MailReady() and draftMatches(job)
     end
     return A.API:MerchantReady() and (not job.automatic or A.db.autoSellJunk)
+end
+
+local function attachStack(job, item, entry)
+    local ok = pcall(C_Container.PickupContainerItem, item.bag, item.slot)
+    -- Pickup can fire callbacks that change the draft, cancel the batch, or
+    -- replace the cursor with another copy of the very same item type.
+    if ok and Ops.job == job and A.API:ComposeOpen() and draftMatches(job)
+        and A.Store:Eligible(item, entry.state) and routeMatches(entry, job.recipient)
+        and A.API:FreeAttachment() == job.attachment and A.Protection:CursorGUID() == entry.guid then
+        ok = pcall(ClickSendMailItemButton, job.attachment)
+    else
+        ok = false
+    end
+    if CursorHasItem() then
+        if A.Protection:CursorGUID() == entry.guid then pcall(ClearCursor) end
+        return false
+    end
+    return ok
 end
 
 function Ops:Step()
@@ -171,7 +206,10 @@ function Ops:Step()
     if not jobReady(job) then
         self:Cancel("Operation stopped. Remaining markings were kept."); return
     end
-    if job.kind == "mail" and not A.API:FreeAttachment() then self:Finish(); return end
+    if job.kind == "mail" then
+        job.attachment = A.API:FreeAttachment()
+        if not job.attachment then self:Finish(); return end
+    end
     A.Store:RefreshInventory()
     local entry = job.entries[job.index]
     if not entry then self:Finish(); return end
@@ -187,33 +225,31 @@ function Ops:Step()
         item = items[entry.guid]
     end
     -- Revalidate identity, mark, size and eligibility immediately before every action.
-    if not item or item.itemID ~= entry.itemID or item.count ~= entry.count or not self:Eligible(item, entry.state)
-        or (job.kind == "mail" and not A.MailRoutes:SameRecipient(A.MailRoutes:Resolve(item.itemID, entry.state), job.recipient))
-        or (job.kind == "junk" and A.API:SellPrice(item) ~= entry.price) then
+    local eligible, price = self:Eligible(item, entry.state)
+    if not eligible or item.itemID ~= entry.itemID or item.count ~= entry.count
+        or (job.kind == "mail" and not routeMatches(entry, job.recipient))
+        or (job.kind == "junk" and price ~= entry.price) then
         self:Cancel("An item changed or is unavailable. Review the remaining marked items and try again.")
         return
     end
     -- Record the in-flight item before calling APIs that can fire events
     -- synchronously. A successful call still needs the checks in Poll below.
     job.pending = entry
+    job.sourceBag = item.bag
     job.started = GetTime()
     local ok
     if job.kind == "junk" then
         ok = pcall(C_Container.UseContainerItem, item.bag, item.slot)
     else
-        local attachment = A.API:FreeAttachment()
-        job.attachment = attachment
-        ok = pcall(C_Container.PickupContainerItem, item.bag, item.slot)
-        if ok and CursorHasItem() then
-            ok = pcall(ClickSendMailItemButton, attachment)
-            if CursorHasItem() then
-                -- Only clear the cursor we just picked up, never a later player cursor.
-                ClearCursor()
-                ok = false
-            end
-        else ok = false end
+        ok = attachStack(job, item, entry)
     end
-    if not ok then self:Cancel("The client refused the action. Remaining markings were kept."); return end
+    if self.job ~= job then self:RefreshButtons(); return end
+    if not ok then
+        local message = job.kind == "mail" and "Attachment stopped. Check the draft and your cursor before trying again."
+            or "The client refused the sale. Remaining markings were kept."
+        self:Cancel(message)
+        return
+    end
     self:RefreshButtons()
     self:SchedulePoll(job)
 end
@@ -224,6 +260,15 @@ function Ops:SchedulePoll(job)
         -- The old timer may still run, but it cannot advance the new job.
         if self.job == job then self:Poll() end
     end)
+end
+
+local function stackLeftBags(job)
+    local items, scope = A.API:Scan(false)
+    if items[job.pending.guid] or not scope[job.sourceBag] then return false end
+    -- A sort may have moved the stack. An unreadable carried slot cannot
+    -- confirm that the sale or attachment went through.
+    for _, complete in pairs(scope) do if not complete then return false end end
+    return true
 end
 
 function Ops:Poll()
@@ -240,7 +285,7 @@ function Ops:Poll()
             -- actual attachment GUID; without one, wait for it to leave the bags.
             local guid = C_TooltipInfo and A.Protection:TooltipGUID(C_TooltipInfo.GetSendMailItem, job.attachment)
             if guid then complete = guid == job.pending.guid
-            else complete = not A.API:Find(job.pending.guid, false) end
+            else complete = stackLeftBags(job) end
         end
         if complete then
             A.Mail.attached = A.Mail.attached or {}
@@ -248,7 +293,7 @@ function Ops:Poll()
             A.Mail:QueueDraftUpdate()
         end
     else
-        complete = not A.API:Find(job.pending.guid, false)
+        complete = stackLeftBags(job)
     end
     if complete then
         -- Mail marks remain even after success: removing attachments or failed sends

@@ -13,13 +13,13 @@ local function itemID(text)
 end
 
 local function itemName(id)
-    local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+    local name = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
     if A.Safe(name) and type(name) == "string" and name ~= "" then return name end
 end
 
 function S:RuleName(id)
     local name = itemName(id)
-    if not name and not self.requestedRuleItems[id] and C_Item.RequestLoadItemDataByID then
+    if not name and not self.requestedRuleItems[id] and C_Item and C_Item.RequestLoadItemDataByID then
         self.requestedRuleItems[id] = true
         C_Item.RequestLoadItemDataByID(id)
     end
@@ -146,14 +146,11 @@ function S:RefreshRules(revealID)
     for id in pairs(A.db.itemRecipients) do ids[id] = true end
     for id in pairs(A.char.itemRules) do ids[id] = true end
     for id in pairs(ids) do
-        local state, recipient = A.char.itemRules[id], A.db.itemRecipients[id]
-        local filterKind = recipient and "custom" or "category"
-        if state == "disenchant" then
-            recipient, filterKind = A.db.mailRoutes.disenchanter, "category"
-        end
-        local to, reason = A.MailRoutes:Resolve(id, state)
+        local state = A.char.itemRules[id]
+        local filterKind = state ~= "disenchant" and A.db.itemRecipients[id] and "custom" or "category"
+        local to, reason, configured = A.MailRoutes:Resolve(id, state)
         -- Keep the saved recipient searchable when this character is the destination.
-        local filterName = A.MailRoutes:DisplayName(to or recipient)
+        local filterName = A.MailRoutes:DisplayName(to or configured)
         local nameKey = filterName:lower()
         if filterName ~= "" then recipientNames[nameKey] = filterName end
         local recipientMatches = recipientFilter == "all" or recipientFilter == filterKind or recipientFilter == "name:" .. nameKey
@@ -198,7 +195,7 @@ function S:RefreshRules(revealID)
             row.mark:SetText(data.mark)
             row.address:SetText(data.address)
             row.source:SetText(data.source)
-            local icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(data.id)
+            local icon = C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(data.id)
             row.icon:SetTexture(A.Safe(icon) and icon or "Interface\\Icons\\INV_Misc_QuestionMark")
         end
     end

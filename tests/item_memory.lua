@@ -48,6 +48,36 @@ return function(M, A, test, eq, mark)
         eq(A.char.review[fresh.guid], nil)
     end)
 
+    for _, interruption in ipairs({ "zero slots", "unreadable item" }) do
+        test("an existing unmarked copy stays unmarked after a scan with " .. interruption, function()
+            remember(true)
+            item("Item-Teacher", 1)
+            local existing = M.item("Item-AlreadyOwned", 1, 1, { itemID = feather })
+            choose(1, "Mark for Disenchanting")
+            local bag = M.bags[1]
+            if interruption == "zero slots" then M.bags[1] = nil else existing.secretID = M.secret end
+            bagsChanged()
+            M.bags[1], existing.secretID = bag, nil
+            local fresh = M.item("Item-NewCopy", 1, 2, { itemID = feather })
+            bagsChanged()
+            eq(A.Store:Get(existing.guid), nil)
+            eq(A.Store:Get(fresh.guid), "disenchant")
+        end)
+    end
+
+    test("a split from a readable Locked stack is detected during a partial bag scan", function()
+        remember(true)
+        local source = item("Item-LockedSource", 1, 4)
+        choose(1, "Lock Item")
+        item("Item-Teacher", 2); choose(2, "Mark for Disenchanting")
+        item("Item-Unreadable", 3).secretID = M.secret
+        source.count = 2
+        local split = item("Item-SplitOff", 4, 2)
+        bagsChanged()
+        eq(A.Store:Get(split.guid), nil)
+        eq(A.char.review[split.guid], true)
+    end)
+
     test("hover changes the future rule, Locked overrides one copy and Clear forgets the type", function()
         remember(true); item("Item-First", 1); item("Item-Second", 2)
         local button = M.button(0, 1)
@@ -129,6 +159,18 @@ return function(M, A, test, eq, mark)
         M.combat = false; event("PLAYER_REGEN_ENABLED"); M.tick(0)
         eq(A.Store:Get("Item-Paused"), nil)
         item("Item-Next", 3); bagsChanged(); eq(A.Store:Get("Item-Next"), "mail")
+    end)
+
+    test("resuming rules waits for a partial bag while other bags can learn new copies", function()
+        remember(true); item("Item-Teacher", 1); choose(1, "Mark as Junk"); remember(false)
+        local paused = M.item("Item-DuringPause", 1, 1, { itemID = feather, secretID = M.secret })
+        remember(true)
+        local fresh = item("Item-AfterResume", 2); bagsChanged()
+        eq(A.Store:Get(fresh.guid), "junk")
+        paused.secretID = nil; bagsChanged()
+        eq(A.Store:Get(paused.guid), nil)
+        local nextCopy = M.item("Item-AfterLoad", 1, 2, { itemID = feather }); bagsChanged()
+        eq(A.Store:Get(nextCopy.guid), "junk")
     end)
 
     test("remembered types are isolated per character while the checkbox is shared", function()

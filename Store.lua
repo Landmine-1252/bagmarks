@@ -164,24 +164,35 @@ function Store:Reconcile(items, scope)
     if A.readOnly then return end
     local previous, diminished = A.char.observed, {}
     local carried, rules = {}, A.char.itemRules
-    if A.db.rememberItemTypes and not self.baselineBeforeRules and next(rules) then
+    local baseline = self.baselineBeforeRules
+    if (A.db.rememberItemTypes or baseline) and next(rules) then
         for _, bag in ipairs(A.API:BagIDs(false)) do carried[bag] = true end
+    end
+    if baseline == true then
+        if not next(scope) then return end
+        -- On resuming rules, take the first readable snapshot of each owned bag.
+        -- A partially loaded bag must not delay new acquisitions in other bags.
+        baseline = {}
+        for bag in pairs(scope) do if carried[bag] then baseline[bag] = true end end
+        for _, old in pairs(previous) do if carried[old.bag] then baseline[old.bag] = true end end
+        self.baselineBeforeRules = baseline
     end
     for guid, old in pairs(previous) do
         local state = self:Get(guid)
-        if scope[old.bag] and (state or A.char.review[guid]) then
-            local current = items[guid]
-            if not current or current.count < old.count then
-                local source = diminished[old.itemID]
-                -- true records an uncertain or mixed source, even if another source agrees.
-                if A.char.review[guid] or (source and source ~= state) then diminished[old.itemID] = true
-                else diminished[old.itemID] = state end
-            end
+        local current = items[guid]
+        -- A readable stack can shrink even while another slot is loading.
+        -- An unseen marked stack in a partial bag is still a possible split source.
+        if (state or A.char.review[guid]) and ((current and current.count < old.count)
+            or (not current and scope[old.bag] ~= nil)) then
+            local source = diminished[old.itemID]
+            -- true records an uncertain or mixed source, even if another source agrees.
+            if A.char.review[guid] or (source and source ~= state) then diminished[old.itemID] = true
+            else diminished[old.itemID] = state end
         end
     end
     for guid, item in pairs(items) do
         local old = previous[guid]
-        local rule = carried[item.bag] and rules[item.itemID]
+        local rule = A.db.rememberItemTypes and carried[item.bag] and not (baseline and baseline[item.bag]) and rules[item.itemID]
         local growing = old and item.count > old.count
         if not old or growing or (rule and not carried[old.bag]) then
             local state, source = self:Get(guid), diminished[item.itemID]
@@ -196,14 +207,17 @@ function Store:Reconcile(items, scope)
     end
     local nextObserved = {}
     for guid, old in pairs(previous) do
-        -- Keep observations for inaccessible bags; closing a bank is not a loss.
+        -- Preserve unseen copies until a complete scan can confirm their absence.
         if not scope[old.bag] then nextObserved[guid] = old end
     end
     for guid, item in pairs(items) do
         nextObserved[guid] = { itemID = item.itemID, count = item.count, bag = item.bag }
     end
     A.char.observed = nextObserved
-    if next(scope) then self.baselineBeforeRules = nil end
+    if baseline then
+        for bag in pairs(baseline) do if scope[bag] then baseline[bag] = nil end end
+        if not next(baseline) then self.baselineBeforeRules = nil end
+    end
 end
 
 function Store:RefreshInventory()

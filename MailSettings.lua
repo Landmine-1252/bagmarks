@@ -46,6 +46,11 @@ function S:EditingRecipient()
     for _, field in ipairs(self.addressFields or {}) do if field:HasFocus() then return field end end
 end
 
+function S:EditingMailRoute()
+    -- Item rules commit on Save. Other recipients commit when focus leaves the field.
+    return (self.ruleFrame and self.ruleFrame:IsVisible()) or self:EditingRecipient()
+end
+
 function S:CreateMailPanel()
     local w, parent = self.width, self.panels.Mail
     self.recipeBack = UI.Button(parent, "Destinations", 122, 0, 0, function() self:ShowMailRecipes(false) end)

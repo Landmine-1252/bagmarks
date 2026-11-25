@@ -5,6 +5,9 @@
 - Mark gear **Disenchant** and choose your **Disenchanter** in Mail settings. At the mailbox, eligible stacks join that character's draft for you to review and send.
 - Choose **Letters** in Appearance to mark items with a blue **M** for Mail, red **J** for Junk, violet **D** for Disenchant and gold **L** for Locked.
 - Mail settings now start with your account and character defaults. Crafting materials are listed alphabetically, followed by the disenchanter and mage scroll recipients.
+- Existing stacks keep their marks when a bag temporarily reports no slots or an item is unreadable. Selling and mailing wait for confirmation before moving to the next stack.
+- Auto-mail waits for recipient edits to finish and groups routes saved on different realms for the same regional character. Changing the destination or the item on the cursor during pickup stops the attachment.
+- A subject edited while a send is pending survives the draft refresh. Item rules can also be found by the name of the character keeping the item, including when the destination comes from a category or default.
 
 ## 1.1.0 - Mail routing, item rules and new icon themes
 

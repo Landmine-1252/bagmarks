@@ -10,6 +10,22 @@ ADDON = "BagMarks"
 TIMESTAMP = (2026, 11, 14, 0, 0, 0)  # Reproducible; independent of local file mtimes.
 
 
+def texture_sizes(version):
+    """Runtime textures required by this release, including art shared by themes."""
+    version = tuple(map(int, version.split(".")))
+    sizes = {"BagMarks": (64, 64)}
+    themes = [""]
+    marks = ["Lock", "Junk", "Mail"]
+    if version >= (1, 1, 0):
+        themes.extend(("Heraldry", "Runic", "Workshop", "Ledger", "Nautical", "Postage"))
+        sizes.update(Border=(32, 32), Circles=(32, 32), Toggle=(64, 32))
+    if version >= (1, 1, 1):
+        themes.append("Letters")
+        marks.append("Disenchant")
+    sizes.update({theme + mark: (32, 32) for theme in themes for mark in marks})
+    return sizes
+
+
 def release_files(root):
     """Ship runtime files and documentation, not the repository or build tools."""
     files = [root / name for name in ("BagMarks.toc", "Bindings.xml", "README.md", "CHANGELOG.md", "LICENSE")]
@@ -76,7 +92,7 @@ def validate_archive(path, expected=None):
             raise ValueError("Missing or inconsistent release version")
         required = {f"{ADDON}/{line.strip()}" for line in toc.splitlines() if line.strip() and not line.startswith("#")}
         required.update(f"{ADDON}/{name}" for name in ("Bindings.xml", "README.md", "CHANGELOG.md", "LICENSE"))
-        required.update(f"{ADDON}/Media/{name}.tga" for name in ("BagMarks", "Lock", "Junk", "Mail", "Disenchant"))
+        required.update(f"{ADDON}/Media/{name}.tga" for name in texture_sizes(version[1]))
         missing = required - payload.keys()
         if missing:
             raise ValueError("Missing required release files: " + ", ".join(sorted(missing)))

@@ -8,7 +8,6 @@ local function updateInventory()
     A.pendingRefresh = false
     if not A.ready then return end
     A.Store:RefreshInventory()
-    A.Bags:Discover()
     A.Refresh()
 end
 

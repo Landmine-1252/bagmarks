@@ -155,11 +155,11 @@ local function namesEqual(left, right)
 end
 
 function Routes:SameRecipient(left, right)
-    left, right = self:Qualify(left), self:Qualify(right)
-    if left and right and (not left:find("-", 1, true) or not right:find("-", 1, true)) then
+    if regionalNames() then
+        -- Two characters can save the same regional mailbox with different realm suffixes.
         return namesEqual(self:DisplayName(left), self:DisplayName(right))
     end
-    return namesEqual(left, right)
+    return namesEqual(self:Qualify(left), self:Qualify(right))
 end
 
 function Routes:DisplayName(address)
@@ -175,8 +175,8 @@ end
 local function deliverable(name, label)
     if not name then return nil, "No recipient set" end
     local player = Routes:PlayerAddress()
-    if not player then return nil, "Character unavailable" end
-    if namesEqual(Routes:DisplayName(name), Routes:DisplayName(player)) then return nil, "Keep on this character" end
+    if not player then return nil, "Character unavailable", name end
+    if namesEqual(Routes:DisplayName(name), Routes:DisplayName(player)) then return nil, "Keep on this character", name end
     return name, label
 end
 

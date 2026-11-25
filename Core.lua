@@ -68,7 +68,7 @@ end
 
 function A.SetOption(key, value)
     if A.readOnly then return end
-    if key == "rememberItemTypes" and value and not A.db.rememberItemTypes then
+    if key == "rememberItemTypes" and value and not A.db.rememberItemTypes and next(A.char.itemRules) then
         A.Store.baselineBeforeRules = true
         A.Store:RefreshInventory() -- Baseline the copies already in the bags before resuming rules.
     end

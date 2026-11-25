@@ -32,6 +32,33 @@ return function(M, A, test, eq, mark)
         eq(A.Operations.job, nil)
     end)
 
+    test("an unreadable stack cannot confirm a refused sale or advance the queue", function()
+        enable(); twoItems()
+        M.rejectSale = true
+        openMerchant(); M.tick(.2); eq(M.saleAttempts, 1)
+        local first = M.bags[0][1]
+        first.secretID = M.secret; M.rejectSale = false; M.tick(1)
+        eq(M.saleAttempts, 1); eq(#M.sold, 0)
+        first.secretID = nil; M.tick(2)
+        eq(A.Operations.job, nil); eq(#M.sold, 0); eq(A.Store:Get(first.guid), "junk")
+    end)
+
+    test("a sale preview uses the quoted price and rechecks it on confirmation", function()
+        local stack = mark("Item-Quote", 0, 1, "junk", { price = 250, count = 3 })
+        openMerchant()
+        local getInfo, quotes = C_Item.GetItemInfo, 0
+        C_Item.GetItemInfo = function(link)
+            quotes = quotes + 1
+            if quotes == 1 then return getInfo(link) end
+        end
+        local ok, err = pcall(function()
+            A.Operations:PreviewJunk()
+            A.UI.confirm.accept:Fire("OnClick")
+        end)
+        C_Item.GetItemInfo = getInfo
+        assert(ok, err); eq(quotes, 2); eq(#M.sold, 0); eq(M.bags[0][1], stack)
+    end)
+
     test("automatic selling defaults off and the preference survives reload and sanitization", function()
         eq(A.db.autoSellJunk, false)
         mark("Item-J", 0, 1, "junk"); openMerchant(); M.tick(1); eq(#M.sold, 0)

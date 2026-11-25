@@ -21,6 +21,51 @@ return function(M, A, test, eq, mark)
         M.tick(0)
     end
 
+    for _, change in ipairs({ "different cursor", "edited recipient", "occupied attachment", "changed route", "unreadable cursor" }) do
+        test("mail rechecks the draft after pickup with " .. change, function()
+            local wanted = stack(1, { itemID = 955 })
+            local other = mark("Item-OtherRecipient", 0, 2, "disenchant", { itemID = 955 })
+            A.Store:SetMailRoute("disenchanter", "Enchanter")
+            local pickup, click, attempts = C_Container.PickupContainerItem, ClickSendMailItemButton, 0
+            ClickSendMailItemButton = function(...)
+                attempts = attempts + 1
+                return click(...)
+            end
+            C_Container.PickupContainerItem = function(bag, slot)
+                pickup(bag, slot)
+                if change == "different cursor" then ClearCursor(); M.forcePickup(0, 2)
+                elseif change == "edited recipient" then typeText(SendMailNameEditBox, "Someone Else")
+                elseif change == "occupied attachment" then M.attachments[1] = other; M.bags[0][2] = nil
+                elseif change == "changed route" then A.Store:SetRecipient("Someone Else")
+                else M.cursorLocationMissing = true end
+            end
+            openSend(); M.tick(1)
+            C_Container.PickupContainerItem, ClickSendMailItemButton = pickup, click
+            eq(attempts, 0); eq(A.Operations.job, nil)
+            if change == "unreadable cursor" then
+                eq(M.cursor and M.cursor.item, wanted)
+            else
+                eq(M.bags[0][1], wanted)
+                eq(M.cursor and M.cursor.item, change == "different cursor" and other or nil)
+            end
+            eq(M.attachments[1], change == "occupied attachment" and other or nil)
+            eq(M.attachments[2], nil)
+        end)
+    end
+
+    test("without an attachment GUID a partial bag scan cannot confirm the transfer", function()
+        local wanted = stack(1)
+        local nextItem = stack(2)
+        M.missingTooltipGUID = true
+        openSend(); M.tick(0)
+        eq(M.attachments[1], wanted)
+        -- The client still lists the attached GUID in a temporarily unreadable bag slot.
+        M.bags[0][1] = wanted; wanted.secretID = M.secret; M.tick(1)
+        eq(M.attachments[2], nil)
+        M.bags[0][1] = nil; M.tick(1)
+        eq(M.attachments[2], nextItem); eq(A.Mail.batchComplete, true)
+    end)
+
     test("a delivered Scroll of Intellect cannot be sent again from a stuck attachment or stale bag slot", function()
         local scroll = stack(1, { itemID = 955, name = "Scroll of Intellect" })
         openSend(); M.tick(1); SendMailFrame_Update()
@@ -175,6 +220,17 @@ return function(M, A, test, eq, mark)
         M.attachments = {}; event("MAIL_SEND_INFO_UPDATE"); M.tick(1)
         eq(M.attachments[1], ore); eq(M.attachments[2], nil); eq(SendMailNameEditBox:GetText(), "Smith")
         eq(#M.removals, 0)
+    end)
+
+    test("a subject cleared after clicking Send stays blank when success arrives", function()
+        stack(1); openSend(); M.tick(1)
+        M.playerSending = true; SendMailFrame_SendMail(); M.playerSending = nil
+        local replacement = { guid = "Item-NewEnvelope", itemID = 2589, name = "Linen Cloth", count = 1 }
+        M.attachments[1] = replacement
+        typeText(SendMailNameEditBox, "Chosen"); typeText(SendMailSubjectEditBox, "")
+        event("MAIL_SEND_SUCCESS"); M.tick(1)
+        eq(M.attachments[1], replacement); eq(SendMailSubjectEditBox:GetText(), "")
+        eq(SendMailNameEditBox:GetText(), "Chosen")
     end)
 
     test("post-send redraw preserves a new attachment and a deliberately blank subject", function()

@@ -6,6 +6,7 @@ import re
 import struct
 import subprocess
 import xml.etree.ElementTree as ET
+from package import texture_sizes
 from release import read_release
 
 parser = argparse.ArgumentParser()
@@ -53,10 +54,7 @@ for name, callback in expected.items():
     assert f"function {callback}(" in binding_code
     assert f"BINDING_NAME_{name}" in binding_code
     assert "key" not in binding.attrib, "Shortcuts must start unbound"
-themes = ("", "Heraldry", "Runic", "Workshop", "Ledger", "Nautical", "Postage", "Letters")
-icons = [(theme + state, 32, 32) for theme in themes for state in ("Lock", "Junk", "Mail", "Disenchant")]
-for name, expected_width, expected_height in [*icons, ("Border", 32, 32), ("Circles", 32, 32),
-                                               ("BagMarks", 64, 64), ("Toggle", 64, 32)]:
+for name, (expected_width, expected_height) in texture_sizes(addon_version).items():
     data = (root / "Media" / f"{name}.tga").read_bytes()
     width, height, depth = struct.unpack_from("<HHB", data, 12)
     assert (width, height, depth) == (expected_width, expected_height, 32)

@@ -144,6 +144,16 @@ test("missing modern APIs disable item features without throwing", function()
     C_Item.GetItemGUID = original; A.API:Initialize()
 end)
 
+test("an incomplete quest flag keeps both Junk and Disenchant out of automatic actions", function()
+    mark("Item-J", 0, 1, "junk"); mark("Item-D", 0, 2, "disenchant")
+    local read = C_Container.GetContainerItemQuestInfo
+    C_Container.GetContainerItemQuestInfo = function() return {} end
+    local sell = A.Operations:Eligible(A.API:Read(0, 1), "junk")
+    local attach = A.Operations:Eligible(A.API:Read(0, 2), "disenchant")
+    C_Container.GetContainerItemQuestInfo = read
+    eq(sell, false); eq(attach, false)
+end)
+
 test("theme changes repaint open bags and disabling icons removes overlays", function()
     mark("Item-A", 0, 1, "locked")
     local button = M.button(0, 1)

@@ -72,6 +72,13 @@ class ReleaseArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing required release files"):
             validate_archive(archive)
 
+    def test_requires_the_textures_for_every_shipped_theme(self):
+        for name in ("LettersJunk", "RunicDisenchant", "Border"):
+            with self.subTest(texture=name):
+                archive = self.altered(lambda entry: entry.filename != f"BagMarks/Media/{name}.tga")
+                with self.assertRaisesRegex(ValueError, name):
+                    validate_archive(archive)
+
     def test_rejects_symlinks_and_parent_paths(self):
         def symlink(entry):
             if entry.filename == "BagMarks/API.lua":

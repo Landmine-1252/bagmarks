@@ -104,11 +104,11 @@ return function(M, A, test, eq, mark)
         button:SetScale(.75); button.icon:SetSize(48, 48)
         eq(overlay.icon:GetWidth(), 48)
         eq(overlay.icon:GetEffectiveScale(), button.icon:GetEffectiveScale())
-        eq(#A.themeOrder, 11)
+        eq(#A.themeOrder, 12)
         for index, theme in ipairs(A.themeOrder) do
             A.Settings.themes[theme]:Fire("OnClick"); eq(A.db.theme, theme)
             A.Store:Initialize(); eq(A.db.theme, theme)
-            for _, state in ipairs({ "locked", "junk", "mail" }) do
+            for _, state in ipairs({ "locked", "junk", "mail", "disenchant" }) do
                 A.Store:Set(A.API:Read(0, 1), state)
                 eq(overlay.icon.color[1], A.Themes[theme][state][1])
                 if index > 3 then assert(overlay.icon.texture:find(theme, 1, true)) end
@@ -136,7 +136,7 @@ return function(M, A, test, eq, mark)
         s.themes.Circles:Fire("OnClick")
         eq(s.sizeButtons.medium:IsEnabled(), true); eq(s.sizeButtons.medium.selected, true)
         eq(overlay.icon:GetWidth(), 21); eq(list.icon:GetWidth(), 16); eq(s.previewMarks.locked:GetWidth(), 23)
-        for _, state in ipairs({ "locked", "junk", "mail" }) do
+        for _, state in ipairs({ "locked", "junk", "mail", "disenchant" }) do
             A.Store:Set(A.API:Read(0, 1), state)
             eq(overlay.icon.texture, "Interface\\AddOns\\BagMarks\\Media\\Circles.tga")
             eq(s.previewMarks[state].texture, overlay.icon.texture)

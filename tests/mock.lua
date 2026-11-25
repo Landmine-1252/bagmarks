@@ -448,7 +448,8 @@ function ClickSendMailItemButton(index, clear)
     end
     if M.rejectMail then return end
     assert(not M.attachments[index], "occupied attachment")
-    assert(M.A.Store:Get(M.cursor.item.guid) == "mail", "non-mail attachment")
+    local mark = M.A.Store:Get(M.cursor.item.guid)
+    assert(mark == "mail" or mark == "disenchant", "non-mail attachment")
     M.attachments[index] = M.cursor.item
     M.cursor = nil
 end

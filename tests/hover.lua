@@ -15,7 +15,7 @@ return function(M, A, test, eq, mark)
     test("hover shortcut locks first and cycles all marks without marking mode", function()
         M.item("Item-A", 0, 1); M.item("Item-Copy", 0, 2)
         local button = hover()
-        for _, state in ipairs({ "locked", "junk", "mail", false }) do
+        for _, state in ipairs({ "locked", "junk", "mail", "disenchant", false }) do
             BagMarks_CycleHoveredItem()
             eq(A.Store:Get("Item-A"), state or nil)
             eq(A.Store:Get("Item-Copy"), nil)

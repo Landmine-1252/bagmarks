@@ -27,9 +27,9 @@ end
 local pages = {
     { "General", generalDetail },
     { "Marking", "Choose how to mark an item with your mouse or keyboard." },
-    { "Mail", "Choose a destination for the stacks you mark for mail." },
+    { "Mail", "For Mail marks, item rules come first, then category recipients, then your default." },
     { "Item rules", rulesDetail },
-    { "Appearance", "Choose how Locked, Junk and Mail appear on your items." },
+    { "Appearance", "Choose how marks appear on your items." },
 }
 
 function S:Check(parent, key, label, x, y, width)
@@ -64,7 +64,7 @@ function S:CreateGeneral(panel)
     local sell = self:Check(items, "autoSellJunk", "Automatically sell marked junk", 10, -33, w - 20)
     UI.Tip(sell, "Automatic junk selling", "At your next merchant visit, sell eligible stacks marked Junk. You can stop a sale in progress.")
     UI.Line(items, 14, -65, w - 28)
-    local remember = self:Check(items, "rememberItemTypes", "Remember Mail and Junk by item type", 10, -70, w - 20)
+    local remember = self:Check(items, "rememberItemTypes", "Remember Mail, Junk and Disenchant by item type", 10, -70, w - 20)
     UI.Tip(remember, "Future copies", "Remember the marks you choose on this character. Clear Mark forgets an item type.")
     UI.Label(items, "Manage which items receive these marks.", 14, -114, "GameFontHighlightSmall")
     UI.Button(items, "View item rules", 116, w - 130, -107, function() self:OpenItemRoutes() end)
@@ -90,7 +90,7 @@ function S:CreateMarking(panel)
     self.mouseButton = choice("mouseButton", "Mouse button", -60, A.Interaction.buttons)
     self.markingAction = choice("markingAction", "Click action", -89, A.Interaction.actions)
     UI.Tip(self.modifier, "Modifier keys", "Marking Mode only reserves the mouse button while the mode is on.")
-    UI.Tip(self.markingAction, "Click action", "Cycle through Normal, Locked, Junk and Mail, or open a menu with every mark.")
+    UI.Tip(self.markingAction, "Click action", "Cycle through Normal, Locked, Junk, Mail and Disenchant, or open a menu with every mark.")
     self.interactionHint = UI.Label(mouse, "", 14, -128, "GameFontHighlightSmall")
     local keys = UI.Panel(panel, 0, -171, w, 175)
     UI.Label(keys, "Keyboard shortcut", 14, -15, "GameFontNormal")
@@ -123,7 +123,7 @@ end
 
 local previewItems = {
     { "locked", "Locked", "INV_Sword_04" }, { "junk", "Junk", "INV_Misc_Bone_01" },
-    { "mail", "Mail", "INV_Fabric_Linen_01" },
+    { "mail", "Mail", "INV_Fabric_Linen_01" }, { "disenchant", "Disenchant", "INV_Staff_13" },
 }
 
 function S:CreateAppearance(panel)
@@ -141,15 +141,15 @@ function S:CreateAppearance(panel)
         self.sizeButtons[size] = button
     end
     for i, item in ipairs(previewItems) do
-        local frame = UI.Panel(preview, 351 + (i - 1) * 66, -10, 38, 38, "field")
+        local frame = UI.Panel(preview, 322 + (i - 1) * 61, -10, 38, 38, "field")
         local artwork = frame:CreateTexture(nil, "ARTWORK")
         artwork:SetTexture("Interface\\Icons\\" .. item[3])
         artwork:SetPoint("TOPLEFT", 1, -1)
         artwork:SetSize(36, 36)
         local mark = frame:CreateTexture(nil, "OVERLAY")
         self.previewMarks[item[1]] = mark
-        local label = UI.Label(frame, item[2], -10, -48, "GameFontHighlightSmall")
-        label:SetWidth(58)
+        local label = UI.Label(frame, item[2], -13, -48, "GameFontHighlightSmall")
+        label:SetWidth(64)
         label:SetJustifyH("CENTER")
     end
     UI.Label(panel, "Icon theme", 0, -192, "GameFontNormal")
@@ -164,7 +164,7 @@ function S:CreateAppearance(panel)
         for j, item in ipairs(previewItems) do
             local icon = button:CreateTexture(nil, "OVERLAY")
             icon:SetSize(19, 19)
-            icon:SetPoint("TOPLEFT", 103 + (j - 1) * 24, -5)
+            icon:SetPoint("TOPLEFT", 90 + (j - 1) * 22, -5)
             A.PaintIcon(icon, item[1], theme)
         end
     end
@@ -338,7 +338,7 @@ function S:RegisterCategory()
     local panel = CreateFrame("Frame", nil, UIParent)
     panel:Hide()
     UI.Label(panel, "BagMarks " .. A.version, 20, -20, "GameFontNormalLarge")
-    UI.Label(panel, "Mark items to keep, sell, or mail. Open settings with /bm.", 20, -55)
+    UI.Label(panel, "Mark items to keep, sell, mail, or disenchant. Open settings with /bm.", 20, -55)
     UI.Button(panel, "Open BagMarks Settings", 220, 20, -90, function() self:Create(); self.frame:Show() end)
     self.category = Settings.RegisterCanvasLayoutCategory(panel, "BagMarks")
     Settings.RegisterAddOnCategory(self.category)

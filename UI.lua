@@ -204,7 +204,8 @@ function UI:ItemChoices(root, item)
     if A.char.review[guid] then root:CreateTitle("Stack changed. Reapply a mark to review.") end
     local choices = {
         { "Lock Item", "locked" }, { "Mark as Junk", "junk" },
-        { "Mark for Mail", "mail" }, { rule and "Clear mark and forget future mark" or "Clear Mark", false },
+        { "Mark for Mail", "mail" }, { "Mark for Disenchanting", "disenchant" },
+        { rule and "Clear mark and forget future mark" or "Clear Mark", false },
     }
     for _, choice in ipairs(choices) do
         -- false keeps Clear Mark in the choices table; Store represents Normal

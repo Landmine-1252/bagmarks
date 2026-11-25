@@ -322,7 +322,7 @@ function Bags:Tooltip(tooltip)
     if shown and shown.total then
         local hasLocked, count, mixed
         state, hasLocked, count, mixed = A.Ellesmere:GroupState(owner, item)
-        local label = state == "mail" and A.MailRoutes:Tooltip(item.itemID) or A.states[state]
+        local label = A.IsMailMark(state) and A.MailRoutes:Tooltip(item.itemID, state) or A.states[state]
         tooltip:AddLine("BagMarks: " .. (mixed and "Mixed marks" or label or "Normal")
             .. " (" .. count .. " stacks)", 1, .82, .3)
         tooltip:AddLine("Use your marking shortcut to choose one stack. Each stack keeps its own mark.", 1, 1, 1, true)
@@ -331,7 +331,7 @@ function Bags:Tooltip(tooltip)
     end
     if state then
         local color = A.Themes[A.db.theme][state]
-        local label = state == "mail" and A.MailRoutes:Tooltip(item.itemID) or A.states[state]
+        local label = A.IsMailMark(state) and A.MailRoutes:Tooltip(item.itemID, state) or A.states[state]
         tooltip:AddLine("BagMarks: " .. label, color[1], color[2], color[3])
         if state == "locked" then
             tooltip:AddLine("Use and equip normally while Locked. Consumables can still be consumed.", 1, .72, .3, true)

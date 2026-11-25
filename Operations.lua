@@ -18,7 +18,7 @@ function Ops:Eligible(item, state)
     -- otherwise ineligible items must also stay out of every automated path.
     if not A.Store:Eligible(item, state) or A.API:IsQuest(item) or A.API:Refundable(item) then return false end
     if state == "junk" then return A.API:BagAllowsJunkSale(item.bag) and A.API:SellPrice(item) ~= nil end
-    return state == "mail" and A.API:CanMail(item)
+    return A.IsMailMark(state) and A.API:CanMail(item)
 end
 
 -- Both sale paths capture exact GUIDs once, then use the same per-item checks.
@@ -32,7 +32,7 @@ function Ops:CollectJunk(limit)
             if (not limit or #preview < limit) and self:Eligible(item, "junk") then
                 local price = A.API:SellPrice(item)
                 preview[#preview + 1] = { guid = item.guid, count = item.count, itemID = item.itemID,
-                    link = item.link, price = price }
+                    state = "junk", link = item.link, price = price }
                 total = total + price * item.count
             else skipped = skipped + 1 end
         end
@@ -92,13 +92,14 @@ function Ops:CollectMail(toField)
     A.Store:RefreshInventory()
     local entries, recipient = {}, nil
     for _, item in ipairs(ordered(A.API:Scan(false))) do
-        if not (A.Mail.sentGUIDs and A.Mail.sentGUIDs[item.guid]) and self:Eligible(item, "mail") then
-            local to = A.MailRoutes:Resolve(item.itemID)
+        local state = A.Store:Get(item.guid)
+        if A.IsMailMark(state) and not (A.Mail.sentGUIDs and A.Mail.sentGUIDs[item.guid]) and self:Eligible(item, state) then
+            local to = A.MailRoutes:Resolve(item.itemID, state)
             if to and (not toField or A.MailRoutes:MatchesToField(toField, to)) then
                 -- Pin the saved address for this batch even when To shows a bare name.
                 recipient = recipient or A.MailRoutes:Qualify(to)
                 if A.MailRoutes:SameRecipient(to, recipient) then
-                    entries[#entries + 1] = { guid = item.guid, count = item.count, itemID = item.itemID }
+                    entries[#entries + 1] = { guid = item.guid, count = item.count, itemID = item.itemID, state = state }
                 end
             end
         end
@@ -121,7 +122,7 @@ function Ops:AttachMail(automatic)
     end
     local entries, recipient = A.Mail:PlanDraft()
     if not entries or #entries == 0 then
-        if not automatic then A.Print("No eligible Mail stacks for this draft. Check the To field and your recipients in the Mail tab.") end
+        if not automatic then A.Print("No eligible marked stacks for this draft. Check the To field and your recipients in the Mail tab.") end
         return
     end
     A.Mail.batchRecipient, A.Mail.batchComplete = recipient, false
@@ -186,8 +187,8 @@ function Ops:Step()
         item = items[entry.guid]
     end
     -- Revalidate identity, mark, size and eligibility immediately before every action.
-    if not item or item.itemID ~= entry.itemID or item.count ~= entry.count or not self:Eligible(item, job.kind)
-        or (job.kind == "mail" and not A.MailRoutes:SameRecipient(A.MailRoutes:Resolve(item.itemID), job.recipient))
+    if not item or item.itemID ~= entry.itemID or item.count ~= entry.count or not self:Eligible(item, entry.state)
+        or (job.kind == "mail" and not A.MailRoutes:SameRecipient(A.MailRoutes:Resolve(item.itemID, entry.state), job.recipient))
         or (job.kind == "junk" and A.API:SellPrice(item) ~= entry.price) then
         self:Cancel("An item changed or is unavailable. Review the remaining marked items and try again.")
         return
@@ -317,9 +318,9 @@ function Ops:CreateButtons()
         guard:EnableMouse(true)
         guard:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         guard:SetScript("OnClick", function()
-            A.Print("A poor-quality item is marked Mail or Locked. Use Sell Marked Junk to sell your Junk stacks.")
+            A.Print("A poor-quality item is marked Locked, Mail, or Disenchant. Use Sell Marked Junk to sell your Junk stacks.")
         end)
-        A.UI.Tip(guard, "BagMarks: Protected junk", "Blizzard's Sell All Junk could include a Mail or Locked item. Use Sell Marked Junk to review your Junk stacks.")
+        A.UI.Tip(guard, "BagMarks: Protected junk", "Blizzard's Sell All Junk could include a Locked, Mail, or Disenchant item. Use Sell Marked Junk to review your Junk stacks.")
         MerchantSellAllJunkButton:HookScript("OnHide", function() guard:Hide() end)
         self.nativeJunkGuard = guard
     end

@@ -104,7 +104,10 @@ return function(M, A, test, eq, mark)
         eq(A.MailRoutes:Tooltip(17056), "Mail (Keep on this character)")
         local settings = A.Settings
         settings:Toggle(); settings:SelectTab("Mail")
-        local cloth = settings.addressFields[1]
+        local cloth
+        for _, field in ipairs(settings.addressFields) do
+            if field.key == "cloth" then cloth = field; break end
+        end
         cloth.choose:Fire("OnClick")
         eq(#M.menu.choices, 2)
         eq(M.menu.choices[1].text, "Landmine Ill"); eq(M.menu.choices[2].text, "Landmine Tailor")

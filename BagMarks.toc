@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: BagMarks
-## Notes: Small, per-item Locked, Junk, and Mail marks for Blizzard and Ellesmere bags.
+## Notes: Per-item Locked, Junk, Mail, and Disenchant marks for Blizzard and Ellesmere bags.
 ## Author: BagMarks contributors
-## Version: 1.1.0
+## Version: 1.1.1
 ## SavedVariables: BagMarksDB
 ## SavedVariablesPerCharacter: BagMarksCharDB
 ## OptionalDeps: EllesmereUIBags

@@ -102,7 +102,7 @@ function Diagnostics:Report(itemID)
         if matches then lookupReusable = read(A.API.IsReusable, A.API, lookup) end
         local reason
         if release then reason = "Unlock requested; the client has not confirmed the item is free."
-        elseif state == "mail" and A.merchantOpen then reason = "Merchant protection reserves this stack for mailing."
+        elseif A.IsMailMark(state) and A.merchantOpen then reason = "Merchant protection reserves this stack for mailing."
         elseif state ~= "locked" then reason = owned and "Owned hold awaiting release." or "This mark permits ordinary item use."
         elseif A.Protection.syncing then reason = "Protection synchronization is active."
         elseif A.mailOpen and mailbox == false then reason = "Stale mailbox flag is blocking reusable use."

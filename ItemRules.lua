@@ -3,8 +3,8 @@
 local _, A = ...
 local S, UI = A.Settings, A.UI
 local pageSize = 7
-local markChoices = { { false, "No automatic mark" }, { "mail", "Mail" }, { "junk", "Junk" } }
-local markFilters = { { "all", "All future marks" }, { "mail", "Mail" }, { "junk", "Junk" }, { "none", "No automatic mark" } }
+local markChoices = { { false, "No automatic mark" }, { "mail", "Mail" }, { "junk", "Junk" }, { "disenchant", "Disenchant" } }
+local markFilters = { { "all", "All future marks" }, { "mail", "Mail" }, { "junk", "Junk" }, { "disenchant", "Disenchant" }, { "none", "No automatic mark" } }
 local recipientFilters = { { "all", "All mail recipients" }, { "custom", "Item-specific recipient" }, { "category", "Use mail settings" } }
 
 local function itemID(text)
@@ -126,7 +126,7 @@ function S:CreateRuleList(panel)
         local edit = UI.Label(row, "Edit", w - 40, -14, "GameFontHighlightSmall")
         edit:SetTextColor(unpack(UI.colors.accent))
         UI.Tip(row, "Edit item rule", function()
-            return row.item:GetText() .. "\nFuture copies   " .. row.mark:GetText() .. "\n" .. A.MailRoutes:Tooltip(row.itemID)
+            return row.item:GetText() .. "\nFuture copies   " .. row.mark:GetText() .. "\n" .. A.MailRoutes:Tooltip(row.itemID, A.char.itemRules[row.itemID])
         end)
         self.ruleRows[i] = row
     end
@@ -147,14 +147,16 @@ function S:RefreshRules(revealID)
     for id in pairs(A.char.itemRules) do ids[id] = true end
     for id in pairs(ids) do
         local state, recipient = A.char.itemRules[id], A.db.itemRecipients[id]
-        local to, reason = A.MailRoutes:Resolve(id)
-        -- A saved item recipient can still be edited and found by name when
-        -- the resolver keeps the item on this character.
+        local filterKind = recipient and "custom" or "category"
+        if state == "disenchant" then
+            recipient, filterKind = A.db.mailRoutes.disenchanter, "category"
+        end
+        local to, reason = A.MailRoutes:Resolve(id, state)
+        -- Keep the saved recipient searchable when this character is the destination.
         local filterName = A.MailRoutes:DisplayName(to or recipient)
         local nameKey = filterName:lower()
         if filterName ~= "" then recipientNames[nameKey] = filterName end
-        local recipientMatches = recipientFilter == "all" or recipientFilter == (recipient and "custom" or "category")
-            or recipientFilter == "name:" .. nameKey
+        local recipientMatches = recipientFilter == "all" or recipientFilter == filterKind or recipientFilter == "name:" .. nameKey
         if (markFilter == "all" or markFilter == (state or "none"))
             and recipientMatches then
             local name = self:RuleName(id)
@@ -244,7 +246,7 @@ function S:CreateRuleEditor()
         end)
     end)
     self.rulePaused = UI.Label(f, "Remembering is off in General.", 233, -155, "GameFontHighlightSmall")
-    UI.Label(f, "Mail recipient across your account", 16, -191, "GameFontHighlightSmall")
+    UI.Label(f, "Recipient for copies marked Mail (account-wide)", 16, -191, "GameFontHighlightSmall")
     self.ruleChoose = self:ChooseButton(f, 386, -212, function() return recipient:GetText() end, function(address)
         self.pickedRuleAddress = address
         recipient:SetText(A.MailRoutes:DisplayName(address))

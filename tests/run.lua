@@ -53,9 +53,9 @@ test("clean login, defaults and Blizzard settings registration", function()
     eq(SLASH_BAGMARKS1, "/bagmarks"); eq(SLASH_BAGMARKS2, "/bm")
 end)
 
-test("all four mutually exclusive states", function()
+test("all marks are mutually exclusive and clearable", function()
     local item = M.item("Item-A", 0, 1)
-    for _, state in ipairs({ "locked", "junk", "mail" }) do
+    for _, state in ipairs({ "locked", "junk", "mail", "disenchant" }) do
         assert(A.Store:Set(A.API:Read(0, 1), state)); eq(A.Store:Get(item.guid), state)
     end
     A.Store:Set(A.API:Read(0, 1), nil); eq(A.Store:Get(item.guid), nil)
@@ -223,12 +223,13 @@ test("Ellesmere marks, themes, tooltips and clearing update without a bag repain
     local button = M.ellesmereButton(0, 1); paintEllesmere(button)
     local overlay = A.Bags.overlays[button]
     GameTooltip:SetOwner(button)
-    for _, state in ipairs({ "locked", "junk", "mail" }) do
-        A.Store:Set(A.Bags:Read(button), state)
+    for _, mark in ipairs({ { "locked", "Locked" }, { "junk", "Junk" }, { "mail", "Mail (No recipient set)" },
+        { "disenchant", "Disenchant (No disenchanter set)" } }) do
+        A.Store:Set(A.Bags:Read(button), mark[1])
         assert(overlay.icon:IsShown())
-        GameTooltip:SetBagItem(0, 1); eq(GameTooltip.lines[1], state == "mail" and "BagMarks: Mail (No recipient set)" or "BagMarks: " .. A.states[state])
+        GameTooltip:SetBagItem(0, 1); eq(GameTooltip.lines[1], "BagMarks: " .. mark[2])
     end
-    A.SetOption("theme", "Minimal"); eq(overlay.icon.color[2], .8)
+    A.SetOption("theme", "Minimal"); eq(overlay.icon.color[2], A.Themes.Minimal.disenchant[2])
     A.SetOption("overlays", false); eq(overlay.icon:IsShown(), false)
     A.SetOption("overlays", true); assert(overlay.icon:IsShown())
     A.Store:Set(A.Bags:Read(button), nil); eq(overlay.icon:IsShown(), false)
@@ -306,7 +307,7 @@ test("Ellesmere grouped clicks choose a GUID even with cycle mode enabled", func
     GameTooltip:SetOwner(button); GameTooltip:SetBagItem(0, 1)
     assert(GameTooltip.lines[1]:find("Mixed marks")); assert(GameTooltip.lines[3]:find("Locked"))
     M.menu.children[1].choices[1].callback(); assert(overlay.icon:IsShown())
-    M.menu.children[2].choices[4].callback(); eq(overlay.icon:IsShown(), false)
+    M.menu.children[2].choices[5].callback(); eq(overlay.icon:IsShown(), false)
     eq(A.Store:Get("Item-A"), "locked"); eq(A.Store:Get("Item-B"), nil)
 end)
 
@@ -407,7 +408,7 @@ test("context selection follows GUID instead of a stale menu slot", function()
     local overlay = A.Bags.overlays[button]
     A.Bags:Click(overlay, "RightButton")
     eq(M.menu.owner, button, "menu must survive release of the modifier")
-    eq(M.menu.choices[4].selected(), true)
+    eq(M.menu.choices[5].selected(), true)
     M.bags[0][2] = item; M.item("Item-B", 0, 1)
     M.menu.choices[1].callback()
     eq(A.Store:Get("Item-A"), "locked"); eq(A.Store:Get("Item-B"), nil)
@@ -671,7 +672,7 @@ test("each mouse button captures only its selected exact modifier chord", functi
                 end
                 M.menu = nil
                 overlay:Fire("OnClick", selected[1])
-                assert(M.menu and M.menu.choices[4].selected(), "configured click must open the menu")
+                assert(M.menu and M.menu.choices[5].selected(), "configured click must open the menu")
             end
         end
     end
@@ -699,7 +700,7 @@ test("cycling locks first and rotates the selected instance through all marks", 
     A.SetOption("mouseButton", "Button4"); A.SetOption("markingAction", "cycle")
     M.ctrl, M.shift = true, true; A.Bags:Refresh(); local overlay = A.Bags.overlays[button]
     M.menu = nil
-    for _, state in ipairs({ "locked", "junk", "mail", false }) do
+    for _, state in ipairs({ "locked", "junk", "mail", "disenchant", false }) do
         overlay:Fire("OnClick", "Button4")
         eq(A.Store:Get("Item-A"), state or nil); eq(A.Store:Get("Item-B"), nil)
         eq(item.held, nil, "mark cycling must not freeze normal item use")

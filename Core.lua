@@ -2,10 +2,15 @@
 -- Modules share state through A; Blizzard's named entry points use globals.
 local addonName, A = ...
 A.name = addonName
-A.version = "1.1.0"
+A.version = "1.1.1"
 -- SavedVariables format version, independent of the addon release number.
-A.schema = 8
-A.states = { locked = "Locked", junk = "Junk", mail = "Mail" }
+A.schema = 9
+A.states = { locked = "Locked", junk = "Junk", mail = "Mail", disenchant = "Disenchant" }
+
+function A.IsMailMark(state)
+    return state == "mail" or state == "disenchant"
+end
+
 -- Store.lua fills missing/invalid options from these values and keeps valid
 -- saved choices, including shortcuts selected before a default changed.
 A.defaults = {

@@ -45,7 +45,7 @@ return function(M, A, test, eq, mark)
         assert(input:IsVisible()); eq(input.owner, button); eq(input.motion, false)
         M.mouseFoci = { input, button }
         click("RightButton"); eq(A.Store:Get("Item-A"), nil)
-        for _, state in ipairs({ "locked", "junk", "mail" }) do
+        for _, state in ipairs({ "locked", "junk", "mail", "disenchant" }) do
             click("LeftButton"); eq(A.Store:Get("Item-A"), state)
         end
         eq(splits, 0); eq(M.bags[0][1].count, 5)
@@ -109,7 +109,7 @@ return function(M, A, test, eq, mark)
 
     test("combat keeps all mark icons visible without an active marking chord", function()
         local overlays = {}
-        for index, state in ipairs({ "locked", "junk", "mail" }) do
+        for index, state in ipairs({ "locked", "junk", "mail", "disenchant" }) do
             mark("Item-" .. index, 0, index, state)
             local button = M.button(0, index)
             A.Bags:Discover()
@@ -124,7 +124,7 @@ return function(M, A, test, eq, mark)
         end
         eq(A.mode, false); eq(M.menu, nil)
         eq(A.Store:Get("Item-1"), "locked"); eq(M.bags[0][1].held, nil)
-        eq(A.Store:Get("Item-2"), "junk"); eq(A.Store:Get("Item-3"), "mail")
+        eq(A.Store:Get("Item-2"), "junk"); eq(A.Store:Get("Item-3"), "mail"); eq(A.Store:Get("Item-4"), "disenchant")
     end)
 
     test("combat repaint follows the live GUID instead of a cached slot mark", function()

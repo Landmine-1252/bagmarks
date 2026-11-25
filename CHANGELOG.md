@@ -1,5 +1,11 @@
 # BagMarks Changelog
 
+## 1.1.1 - Disenchant mail and colored letter marks
+
+- Mark gear **Disenchant** and choose your **Disenchanter** in Mail settings. At the mailbox, eligible stacks join that character's draft for you to review and send.
+- Choose **Letters** in Appearance to mark items with a blue **M** for Mail, red **J** for Junk, violet **D** for Disenchant and gold **L** for Locked.
+- Mail settings now start with your account and character defaults. Crafting materials are listed alphabetically, followed by the disenchanter and mage scroll recipients.
+
 ## 1.1.0 - Mail routing, item rules and new icon themes
 
 ### Mail recipients

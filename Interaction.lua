@@ -61,7 +61,7 @@ function Interaction:Cycle(owner, item)
         return
     end
     -- Match the menu order: the first marking click protects an unmarked item.
-    local nextState = { normal = "locked", locked = "junk", junk = "mail", mail = false }
+    local nextState = { normal = "locked", locked = "junk", junk = "mail", mail = "disenchant", disenchant = false }
     A.Store:Set(item, nextState[A.Store:Get(item.guid) or "normal"] or nil)
 end
 

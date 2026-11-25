@@ -76,7 +76,7 @@ def validate_archive(path, expected=None):
             raise ValueError("Missing or inconsistent release version")
         required = {f"{ADDON}/{line.strip()}" for line in toc.splitlines() if line.strip() and not line.startswith("#")}
         required.update(f"{ADDON}/{name}" for name in ("Bindings.xml", "README.md", "CHANGELOG.md", "LICENSE"))
-        required.update(f"{ADDON}/Media/{name}.tga" for name in ("BagMarks", "Lock", "Junk", "Mail"))
+        required.update(f"{ADDON}/Media/{name}.tga" for name in ("BagMarks", "Lock", "Junk", "Mail", "Disenchant"))
         missing = required - payload.keys()
         if missing:
             raise ValueError("Missing required release files: " + ", ".join(sorted(missing)))

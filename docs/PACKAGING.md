@@ -1,6 +1,6 @@
 # Building and uploading BagMarks
 
-The current build is **1.1.0**, with a searchable item rule manager, complete character names in the recipient picker, and three mark sizes.
+The current build is **1.1.1**. It adds the Disenchant mark, a dedicated disenchanter mail recipient and the Letters icon theme.
 
 ## Build the upload file
 
@@ -16,7 +16,7 @@ This requires Python 3, Lua 5.1 and its compiler. If Lua is installed elsewhere:
 make package LUA=/path/to/lua5.1 LUAC=/path/to/luac5.1
 ```
 
-The result is **`dist/BagMarks-1.1.0.zip`**. The command runs static checks, the mocked addon tests, archive regression tests, and validation of the finished ZIP. A failed package validation leaves the previous ZIP intact. No game installation, other addon, or SavedVariables file is changed.
+The result is **`dist/BagMarks-1.1.1.zip`**. The command runs static checks, the mocked addon tests, archive regression tests, and validation of the finished ZIP. A failed package validation leaves the previous ZIP intact. No game installation, other addon, or SavedVariables file is changed.
 
 `python3 tools/package.py` creates and validates the ZIP without running the Lua checks or regression suites. Use `make package` for a release.
 
@@ -43,9 +43,9 @@ The CurseForge job reports the file ID after a successful upload and skips a pre
 ## Manual upload to CurseForge
 
 1. Open the existing BagMarks project for World of Warcraft.
-2. Upload **`dist/BagMarks-1.1.0.zip`**, or the identically named addon asset from a successful GitHub release. Do not upload GitHub's source ZIP or the outer Actions artifact ZIP.
+2. Upload **`dist/BagMarks-1.1.1.zip`**, or the identically named addon asset from a successful GitHub release. Do not upload GitHub's source ZIP or the outer Actions artifact ZIP.
 3. Select the matching **Forever 1.60.1** game version in the upload form. The addon declares `Interface: 16001`; it is not a Classic Era or Retail build. If Forever is unavailable in that form, ask CurseForge support about the project configuration instead of choosing an unrelated client version.
-4. Use the version 1.1.0 notes in [CHANGELOG.md](../CHANGELOG.md) as the Markdown changelog. Keep the status as awaiting approval until CurseForge accepts the file.
+4. Use the version 1.1.1 notes in [CHANGELOG.md](../CHANGELOG.md) as the Markdown changelog. Keep the status as awaiting approval until CurseForge accepts the file.
 
 The archive has one top-level `BagMarks/` folder, with `BagMarks.toc` directly inside it. This follows CurseForge's [WoW archive guidance](https://support.curseforge.com/support/solutions/articles/9000196615-known-issues) and [TOC naming requirements](https://support.curseforge.com/support/solutions/articles/9000209856).
 

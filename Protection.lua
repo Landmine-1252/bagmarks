@@ -160,9 +160,9 @@ function Protection:RiskyContext()
     return read(SpellIsTargeting) == true
 end
 
--- Locked marks cover every risky context. Mail marks reserve items at vendors.
+-- Locked marks cover every risky context. Outgoing items are reserved at vendors.
 function Protection:GuardsMark(state)
-    return state == "locked" or (state == "mail" and A.merchantOpen)
+    return state == "locked" or (A.IsMailMark(state) and A.merchantOpen)
 end
 
 function Protection:SyncHolds()

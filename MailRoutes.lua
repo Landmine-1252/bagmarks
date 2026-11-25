@@ -13,11 +13,11 @@ local mageScrolls = {
 
 Routes.materials = {
     { key = "cloth", label = "Cloth", subclass = 5, icon = "INV_Fabric_Linen_01" },
-    { key = "metal", label = "Ore, bars and stone", subclass = 7, icon = "INV_Ore_Copper_01" },
-    { key = "herbs", label = "Herbs", subclass = 9, icon = "INV_Misc_Herb_10" },
-    { key = "leather", label = "Leather and hides", subclass = 6, icon = "INV_Misc_LeatherScrap_03" },
     { key = "cooking", label = "Cooking", subclass = 8, icon = "INV_Misc_Food_15",
         tip = "Meat, fish, eggs and other ingredients used for meals and drinks. Cooking recipes also use this recipient unless you set a recipe destination." },
+    { key = "herbs", label = "Herbs", subclass = 9, icon = "INV_Misc_Herb_10" },
+    { key = "leather", label = "Leather and hides", subclass = 6, icon = "INV_Misc_LeatherScrap_03" },
+    { key = "metal", label = "Ore, bars and stone", subclass = 7, icon = "INV_Ore_Copper_01" },
 }
 
 -- Recipe subclasses and teaching items in Forever 1.60.1.70959. The listed
@@ -51,7 +51,7 @@ local otherCookingReagents = {
     [249796] = true, [251524] = true, [252948] = true,
 }
 
-Routes.labels = { bank = "Account default", mageScrolls = "Mage scrolls", recipes = "Recipe default" }
+Routes.labels = { bank = "Account default", mageScrolls = "Mage scrolls", recipes = "Recipe default", disenchanter = "Disenchanter" }
 local materialsBySubclass, recipesBySubclass, recipesByItem = {}, {}, {}
 for _, material in ipairs(Routes.materials) do
     Routes.labels[material.key] = material.label
@@ -201,13 +201,17 @@ end
 
 local function hasClassRoutes(routes)
     for key in pairs(routes) do
-        if key ~= "bank" and key ~= "mageScrolls" then return true end
+        if key ~= "bank" and key ~= "mageScrolls" and key ~= "disenchanter" then return true end
     end
     return false
 end
 
-function Routes:Resolve(itemID)
+function Routes:Resolve(itemID, state)
     local routes = A.db.mailRoutes
+    if state == "disenchant" then
+        if not routes.disenchanter then return nil, "No disenchanter set" end
+        return deliverable(routes.disenchanter, self.labels.disenchanter)
+    end
     if A.db.itemRecipients[itemID] then return deliverable(A.db.itemRecipients[itemID], "Item rule") end
     if mageScrolls[itemID] then
         if routes.mageScrolls then return deliverable(routes.mageScrolls, self.labels.mageScrolls) end
@@ -234,8 +238,11 @@ function Routes:Resolve(itemID)
     return self:Fallback()
 end
 
-function Routes:Tooltip(itemID)
-    local recipient, reason = self:Resolve(itemID)
+function Routes:Tooltip(itemID, state)
+    local recipient, reason = self:Resolve(itemID, state)
+    if state == "disenchant" then
+        return "Disenchant (" .. (recipient and ("Mail to " .. self:DisplayName(recipient)) or reason) .. ")"
+    end
     if recipient then return "Mail to " .. self:DisplayName(recipient) .. " (" .. reason .. ")" end
     return "Mail (" .. reason .. ")"
 end

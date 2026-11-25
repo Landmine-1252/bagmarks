@@ -70,7 +70,7 @@ function Store:Initialize()
     local char = { schema = A.schema, recipient = addressOf(character.recipient),
         marks = {}, observed = {}, review = {}, itemRules = {} }
     for id, state in pairs(tableOrEmpty(character.itemRules)) do
-        if validItemID(id) and (state == "mail" or state == "junk") then char.itemRules[id] = state end
+        if validItemID(id) and (A.IsMailMark(state) or state == "junk") then char.itemRules[id] = state end
     end
     for guid, record in pairs(tableOrEmpty(character.marks)) do
         -- Schema 0 stored GUID -> state. This migration never introduces an item-ID fallback.
@@ -131,7 +131,7 @@ end
 -- Remembered marks apply to future acquisitions. Snapshot the matching stacks
 -- before changing the rule, including when the editor is used during combat.
 function Store:SetTypeRule(itemID, state)
-    if A.readOnly or not validItemID(itemID) or (state and state ~= "mail" and state ~= "junk") then return end
+    if A.readOnly or not validItemID(itemID) or (state and not A.IsMailMark(state) and state ~= "junk") then return end
     if A.char.itemRules[itemID] == state then return end
     if state and A.db.rememberItemTypes then
         for guid, copy in pairs(A.API:Scan(false, A.InCombat())) do

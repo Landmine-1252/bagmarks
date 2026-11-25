@@ -65,7 +65,8 @@ function S:CreateMailPanel()
         icon:SetPoint("TOPLEFT", 1, y - 4)
         icon:SetTexture("Interface\\Icons\\" .. texture)
         UI.Label(page, label, 26, y - 6)
-        local field = UI.Input(page, 164, y, w - 242, hint or "Use fallback")
+        local field = UI.Input(page, 164, y, w - 242, hint or "Use default recipient")
+        field:SetFontObject("GameFontHighlight")
         field:SetMaxLetters(100)
         field.key = key
         local fields = page.fields
@@ -95,23 +96,14 @@ function S:CreateMailPanel()
         end)
         return field
     end
-    UI.Label(panel, "Categories", 0, 0, "GameFontNormal")
-    for i, material in ipairs(A.MailRoutes.materials) do
-        row(panel, material.key, material.label, material.icon, -22 - (i - 1) * 29,
-            material.tip or ("Send marked " .. material.label:lower() .. " to this character."))
-    end
-    row(panel, "mageScrolls", "Mage scrolls", "INV_Scroll_03", -22 - #A.MailRoutes.materials * 29,
-        "Untranslated scrolls a mage can decipher with Comprehension.")
-    UI.Line(panel, 0, -202, w)
-    UI.Label(panel, "Default recipients for items without a matching mail rule", 0, -212, "GameFontNormal")
-    row(panel, "bank", "Account default", "INV_Misc_Coin_01", -234,
-        "All your characters use this recipient unless they have a character override. If both fields are blank, these items stay in your bags.",
+    UI.Label(panel, "Default recipients", 0, -5, "GameFontNormal")
+    row(panel, "bank", "Account default", "INV_Misc_Coin_01", -28,
+        "Receives Mail items without an item or category recipient. Each character can set its own default below.",
         "Bank alt or other recipient")
-    self.recipient = row(panel, "recipient", "Character override", "INV_Letter_15", -263,
-        "Mail from the character you are playing uses this recipient first. Clear this field to use the account default again.",
+    self.recipient = row(panel, "recipient", "Character override", "INV_Letter_15", -57,
+        "Replaces the account default for mail from this character. Leave both defaults blank to keep unmatched items in your bags.",
         "Use account default")
-    UI.Label(panel, "The override replaces the account default for this character only.", 0, -299, "GameFontHighlightSmall")
-    self.usePreviousRecipient = UI.Button(panel, "Use previous recipient", 154, w - 154, -293, function()
+    self.usePreviousRecipient = UI.Button(panel, "Use previous recipient", 154, w - 154, 0, function()
         if A.readOnly or A.char.recipient ~= "" or not A.db.previousRecipient then return end
         self.recipient:ClearFocus()
         A.Store:SetRecipient(A.db.previousRecipient)
@@ -122,11 +114,27 @@ function S:CreateMailPanel()
     UI.Tip(self.usePreviousRecipient, "Previous account recipient", function()
         return "Use " .. A.MailRoutes:DisplayName(A.db.previousRecipient) .. " as the default recipient for this character only."
     end)
-    local mailbox = UI.Panel(panel, 0, -325, w, 92)
+    UI.Line(panel, 0, -92, w)
+    UI.Label(panel, "Crafting materials", 0, -100, "GameFontNormal")
+    for i, material in ipairs(A.MailRoutes.materials) do
+        row(panel, material.key, material.label, material.icon, -120 - (i - 1) * 29,
+            material.tip or ("Receives " .. material.label:lower() .. " marked for Mail."))
+    end
+
+    UI.Line(panel, 0, -272, w)
+    UI.Label(panel, "Specialist recipients", 0, -280, "GameFontNormal")
+    row(panel, "disenchanter", A.MailRoutes.labels.disenchanter, "Trade_Engraving", -300,
+        "Receives items marked Disenchant. Leave blank to keep those items in your bags.", "Keep in bags")
+    row(panel, "mageScrolls", "Mage scrolls", "INV_Scroll_03", -329,
+        "Receives untranslated scrolls marked for Mail that a mage can decipher with Comprehension.")
+
+    local mailbox = UI.Panel(panel, 0, -368, w, 56)
     UI.Label(mailbox, "At the mailbox", 12, -8, "GameFontNormal")
-    local fill = self:Check(mailbox, "autoFillRecipient", "Automatically fill the To field", 8, -26, w - 16)
+    local half = w / 2
+    local fill = self:Check(mailbox, "autoFillRecipient", "Automatically fill the To field", 8, -24, half - 18)
     UI.Tip(fill, "Fill recipient", "Fill a fresh draft with the next recipient. You can also type a name in the To field.")
-    local attach = self:Check(mailbox, "autoAttachMail", "Automatically attach marked items", 8, -56, w - 16)
+    UI.Line(mailbox, half, -28, 1, 19)
+    local attach = self:Check(mailbox, "autoAttachMail", "Automatically attach marked items", half + 8, -24, half - 16)
     UI.Tip(attach, "Attach marked items", "Prepare one recipient's stacks at a time. Review each draft and click Send.")
 
     row(recipes, "recipes", "Recipe default", "INV_Scroll_03", 0,
@@ -156,7 +164,7 @@ function S:RefreshRecipient()
         if not field:HasFocus() and field:GetText() ~= address then field:SetText(address) end
         if field.profession then
             local inherited = A.MailRoutes:RecipeDefault(field.profession)
-            local hint = inherited and ("Use " .. A.MailRoutes:DisplayName(inherited)) or "Use fallback"
+            local hint = inherited and ("Use " .. A.MailRoutes:DisplayName(inherited)) or "Use default recipient"
             if field.Instructions:GetText() ~= hint then field.Instructions:SetText(hint) end
         end
         field:SetEnabled(not A.readOnly)
